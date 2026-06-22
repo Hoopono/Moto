@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RideApp — Motorista</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; min-height: 100vh; background: #f5f5f5; }
+
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 24px; background: #1a1a2e; color: white; font-weight: 600;
+    }
+    .btn-sair {
+      background: transparent; border: 1px solid rgba(255,255,255,0.4);
+      color: white; padding: 6px 14px; border-radius: 6px; cursor: pointer;
+    }
+
+    .abas { display: flex; background: white; border-bottom: 2px solid #eee; padding: 0 24px; }
+    .aba {
+      padding: 14px 20px; border: none; background: transparent;
+      cursor: pointer; font-size: 14px; color: #666;
+      border-bottom: 2px solid transparent; margin-bottom: -2px;
+    }
+    .aba.ativa { color: #2563eb; border-bottom-color: #2563eb; font-weight: 700; }
+
+    .lista { padding: 24px; display: flex; flex-direction: column; gap: 16px; max-width: 800px; margin: 0 auto; }
+
+    .card {
+      background: white; border-radius: 12px; padding: 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07); border: 1px solid #e5e7eb;
+    }
+    .card p { font-size: 14px; margin-bottom: 4px; color: #374151; }
+
+    .btn-aceitar {
+      padding: 10px 20px; background: #2563eb; color: white;
+      border: none; border-radius: 8px; font-weight: 700; cursor: pointer;
+    }
+    .btn-aceitar:hover { background: #1d4ed8; }
+
+    .btn-acao {
+      padding: 8px 16px; background: #f59e0b; color: white;
+      border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 6px;
+    }
+    .btn-acao.verde { background: #10b981; }
+
+    .vazio { text-align: center; color: #9ca3af; padding: 40px; }
+
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 99px;
+      font-size: 12px; font-weight: 600;
+    }
+    .badge-azul { background: #dbeafe; color: #1d4ed8; }
+    .badge-verde { background: #d1fae5; color: #065f46; }
+    .badge-amarelo { background: #fef3c7; color: #92400e; }
+    .badge-cinza { background: #f3f4f6; color: #6b7280; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span>🚗 RideApp — Motorista</span>
+  <button class="btn-sair" onclick="sair()">Sair</button>
+</header>
+
+<div class="abas">
+  <button class="aba ativa" onclick="trocarAba('disponiveis', this)">
+    Corridas disponíveis <span id="badge-disp">(0)</span>
+  </button>
+  <button class="aba" onclick="trocarAba('minhas', this)">
+    Minhas corridas <span id="badge-minhas">(0)</span>
+  </button>
+</div>
+
+<div class="lista" id="lista-disponiveis"></div>
+<div class="lista oculto" id="lista-minhas"></div>
+
+<style>.oculto { display: none !important; }</style>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getAuth, onAuthStateChanged, signOut }
+    from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+  import { getFirestore, collection, query, where, onSnapshot, doc, updateDoc }
+    from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBu6LwKxIOxx-gTFIPYOJrjFqU0Kpj98HI",
+    authDomain: "meu-app-passageiro.firebaseapp.com",
+    databaseURL: "https://meu-app-passageiro-default-rtdb.firebaseio.com",
+    projectId: "meu-app-passageiro",
+    storageBucket: "meu-app-passageiro.firebasestorage.app",
+    messagingSenderId: "638222729850",
+    appId: "1:638222729850:web:b2ce8c66bc7de8612731c3"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  let usuario = null;
+
+  onAuthStateChanged(auth, (u) => {
+    if (!u) { window.location.href = "index.html"; return; }
+    usuario = u;
+    escutarCorridas();
+  });
+
+  const statusBadge = {
+    procurando: '<span class="badge badge-azul">🔍 Procurando</span>',
+    aceita: '<span class="badge badge-verde">✅ Aceita</span>',
+    em_andamento: '<span class="badge badge-amarelo">🚗 Em andamento</span>',
+    finalizada: '<span class="badge badge-cinza">🏁 Finalizada</span>',
+    cancelada: '<span class="badge badge-cinza">❌ Cancelada</span>',
+  };
+
+  function escutarCorridas() {
+    // Corridas disponíveis (procurando motorista)
+    onSnapshot(
+      query(collection(db, "corridas"), where("status", "==", "procurando")),
+      (snap) => {
+        const corridas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        document.getElementById("badge-disp").textContent = `(${corridas.length})`;
+        const lista = document.getElementById("lista-disponiveis");
+        if (corridas.length === 0) {
+          lista.innerHTML = '<p class="vazio">Nenhuma corrida disponível no momento.</p>';
+          return;
+        }
+        lista.innerHTML = corridas.map(c => `
+          <div class="card">
+            <div>
+              <p><strong>Destino:</strong> ${c.enderecoDestino}</p>
+              <p><strong>Pagamento:</strong> ${c.formaPagamento}</p>
+              <p>${statusBadge[c.status] || c.status}</p>
+            </div>
+            <button class="btn-aceitar" onclick="aceitar('${c.id}')">Aceitar</button>
+          </div>
+        `).join("");
+      }
+    );
+
+    // Minhas corridas
+    onSnapshot(
+      query(collection(db, "corridas"), where("motoristaId", "==", usuario.uid)),
+      (snap) => {
+        const corridas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        document.getElementById("badge-minhas").textContent = `(${corridas.length})`;
+        const lista = document.getElementById("lista-minhas");
+        if (corridas.length === 0) {
+          lista.innerHTML = '<p class="vazio">Você ainda não aceitou nenhuma corrida.</p>';
+          return;
+        }
+        lista.innerHTML = corridas.map(c => `
+          <div class="card">
+            <div>
+              <p><strong>Destino:</strong> ${c.enderecoDestino}</p>
+              <p><strong>Pagamento:</strong> ${c.formaPagamento}</p>
+              <p>${statusBadge[c.status] || c.status}</p>
+              ${c.valor ? `<p><strong>Valor:</strong> R$ ${c.valor.toFixed(2)}</p>` : ""}
+            </div>
+            <div>
+              ${c.status === "aceita" ? `<button class="btn-acao" onclick="mudarStatus('${c.id}','em_andamento')">Iniciar viagem</button>` : ""}
+              ${c.status === "em_andamento" ? `<button class="btn-acao verde" onclick="mudarStatus('${c.id}','finalizada')">Finalizar</button>` : ""}
+            </div>
+          </div>
+        `).join("");
+      }
+    );
+  }
+
+  window.aceitar = async (id) => {
+    await updateDoc(doc(db, "corridas", id), { motoristaId: usuario.uid, status: "aceita" });
+  };
+
+  window.mudarStatus = async (id, status) => {
+    await updateDoc(doc(db, "corridas", id), { status });
+  };
+
+  window.sair = async () => {
+    await signOut(auth);
+    window.location.href = "index.html";
+  };
+
+  window.trocarAba = (aba, el) => {
+    document.querySelectorAll(".aba").forEach(a => a.classList.remove("ativa"));
+    el.classList.add("ativa");
+    document.getElementById("lista-disponiveis").classList.toggle("oculto", aba !== "disponiveis");
+    document.getElementById("lista-minhas").classList.toggle("oculto", aba !== "minhas");
+  };
+</script>
+</body>
+</html>
