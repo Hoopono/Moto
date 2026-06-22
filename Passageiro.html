@@ -253,6 +253,46 @@
   .pin span{transform:rotate(45deg); font-size:13px;}
 
   ::-webkit-scrollbar{width:5px;} ::-webkit-scrollbar-thumb{background:var(--concrete-dim); border-radius:3px;}
+
+  /* ---- destination picker ---- */
+  .addr-row{display:flex; gap:12px;}
+  .addr-dots{display:flex; flex-direction:column; align-items:center; padding-top:18px; width:14px; flex:none;}
+  .dot-out{width:10px; height:10px; border-radius:50%; border:2px solid var(--ink); background:#fff;}
+  .dot-out.filled{background:var(--ink);}
+  .dot-line{width:2px; flex:1; background:var(--concrete-dim); margin:4px 0; min-height:34px;}
+  .addr-fields{flex:1; display:flex; flex-direction:column;}
+  .addr-field{padding:10px 0; border-bottom:1px solid var(--concrete-dim);}
+  .addr-field:last-child{border-bottom:none;}
+  .addr-field label{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-bottom:3px;}
+  .addr-field input{width:100%; border:none; outline:none; font-size:15.5px; font-weight:600; font-family:'Inter'; background:transparent; color:var(--ink);}
+  .addr-field input::placeholder{font-weight:400; color:#9A9DA8;}
+
+  .sugg-item.fav{display:flex; align-items:flex-start; gap:10px;}
+  .sugg-item .ic{flex:none; margin-top:1px;}
+  .sugg-item .txt .t1{font-weight:700; font-size:14px; color:var(--ink);}
+  .sugg-item .txt .t2{font-size:12px; color:var(--ink-soft);}
+  .sugg-section-label{font-weight:700; font-size:14px; padding:12px 6px 6px; color:var(--ink);}
+
+  /* ---- ride category screen ---- */
+  .agora-toggle{
+    position:absolute; bottom:14px; left:50%; transform:translateX(-50%); z-index:600;
+    background:#fff; border-radius:30px; padding:4px; display:flex; gap:2px; box-shadow:0 4px 14px rgba(0,0,0,.18);
+  }
+  .ag-chip{padding:9px 18px; font-size:13px; font-weight:700; border-radius:24px; color:var(--ink-soft); cursor:pointer;}
+  .ag-chip.active{background:var(--ink); color:#fff;}
+  .opcionais-pill{font-size:12px; font-weight:600; border:1.5px solid var(--concrete-dim); border-radius:20px; padding:6px 12px; color:var(--ink-soft); cursor:pointer;}
+
+  .cat-card{
+    display:flex; align-items:center; gap:12px; padding:13px 4px; border-bottom:1px solid var(--concrete-dim); cursor:pointer;
+  }
+  .cat-card:last-child{border-bottom:none;}
+  .cat-card.selected{background:rgba(255,177,0,.10); border-radius:12px; padding-left:10px; padding-right:10px;}
+  .cat-card .emoji{font-size:30px; flex:none; width:46px; text-align:center;}
+  .cat-card .info{flex:1; min-width:0;}
+  .cat-card .info .nome{font-weight:700; font-size:15px; display:flex; align-items:center; gap:6px;}
+  .cat-card .info .nome .cap{font-size:12px; color:var(--ink-soft); font-weight:600;}
+  .cat-card .info .desc{font-size:12.5px; color:var(--ink-soft); margin-top:1px;}
+  .cat-card .preco{font-family:'JetBrains Mono'; font-weight:700; font-size:16px; flex:none;}
 </style>
 </head>
 <body>
@@ -309,31 +349,78 @@
     <div class="sheet">
       <div class="grabber"></div>
 
-      <div class="search-row" style="flex-direction:column; gap:8px;">
-        <div class="search-input origem"><span class="dotmark"></span><input type="text" id="inputOrigem" placeholder="Local de partida" readonly></div>
-        <div class="search-input destino"><span class="dotmark"></span><input type="text" id="inputDestino" placeholder="Para onde vamos?" autocomplete="off"></div>
+      <div class="search-row" style="flex-direction:column; gap:8px; margin-bottom:0;">
+        <div class="search-input destino" id="btnAbrirDestino" style="cursor:pointer;">
+          <span class="dotmark" style="background:var(--ink);"></span>
+          <input type="text" id="inputDestinoResumo" placeholder="Para onde vamos?" readonly style="cursor:pointer;">
+        </div>
       </div>
-
-      <div class="suggestions" id="suggestions"></div>
-
-      <div class="payment-row" id="paymentRow">
-        <div class="pay-chip active" data-pay="pix">📱 Pix</div>
-        <div class="pay-chip" data-pay="cartao">💳 Cartão</div>
-        <div class="pay-chip" data-pay="dinheiro">💵 Dinheiro</div>
-      </div>
-
-      <div class="fare-row" id="fareRow" style="display:none;">
-        <div><div class="label">Estimativa da corrida</div><div style="font-size:11.5px; color:#9A9DA8;" id="distEta">—</div></div>
-        <div class="value mono" id="fareValue">R$ 0,00</div>
-      </div>
-
-      <button class="btn btn-amber" id="btnSolicitar" disabled>Escolha um destino</button>
     </div>
 
     <div class="bottomnav">
       <div class="navitem active" data-nav="home"><span class="ic">⌂</span>Início</div>
       <div class="navitem" data-nav="history"><span class="ic">↻</span>Atividade</div>
       <div class="navitem" data-nav="logout2"><span class="ic">⎋</span>Conta</div>
+    </div>
+  </section>
+
+  <!-- ================= ESCOLHA DESTINO ================= -->
+  <section id="screen-destino" class="screen">
+    <div class="topbar" style="padding-bottom:0;">
+      <button class="iconbtn alt" id="btnDestinoVoltar">←</button>
+      <h2 style="font-size:17px; margin:0 auto; padding-right:38px;">Escolha seu destino</h2>
+    </div>
+
+    <div style="padding:14px 18px 0;">
+      <div class="addr-row">
+        <div class="addr-dots"><span class="dot-out"></span><span class="dot-line"></span><span class="dot-out filled"></span></div>
+        <div class="addr-fields">
+          <div class="addr-field">
+            <label>Partida</label>
+            <input type="text" id="inputOrigem" placeholder="Local de partida" readonly>
+          </div>
+          <div class="addr-field">
+            <label>Destino</label>
+            <input type="text" id="inputDestino" placeholder="Digite o endereço, hospital, loja…" autocomplete="off">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="suggestions" id="suggestions" style="flex:1; margin:10px 0 0; padding:0 6px;"></div>
+
+    <div style="padding:14px 18px 20px;">
+      <button class="btn btn-dark" id="btnConfirmarDestino" disabled>Confirmar destino</button>
+    </div>
+  </section>
+
+  <!-- ================= ESCOLHA COMO VIAJAR ================= -->
+  <section id="screen-viagem" class="screen">
+    <div class="map-wrap" style="flex:0 0 230px;">
+      <div id="viagemMap" style="flex:1;"></div>
+      <button class="iconbtn" id="btnViagemVoltar" style="position:absolute; top:14px; left:14px; z-index:600;">←</button>
+      <div class="agora-toggle">
+        <div class="ag-chip active" data-modo="agora">Agora</div>
+        <div class="ag-chip" data-modo="agendar">Agendar</div>
+      </div>
+    </div>
+
+    <div class="sheet" style="flex:1; display:flex; flex-direction:column; min-height:0; border-radius:22px 22px 0 0; margin-top:-16px; z-index:600;">
+      <div class="grabber"></div>
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+        <h3 style="margin:0; font-size:17px; text-transform:none; font-family:'Inter'; font-weight:700;">Escolha como viajar</h3>
+        <span class="opcionais-pill">Opcionais</span>
+      </div>
+
+      <div id="categoriaList" style="overflow-y:auto; flex:1; margin:0 -18px; padding:0 18px;"></div>
+
+      <div class="payment-row" id="paymentRow" style="margin-top:12px;">
+        <div class="pay-chip active" data-pay="pix">📱 Pix</div>
+        <div class="pay-chip" data-pay="cartao">💳 Cartão</div>
+        <div class="pay-chip" data-pay="dinheiro">💵 Dinheiro</div>
+      </div>
+
+      <button class="btn btn-dark" id="btnSolicitar" style="margin-top:12px;">Confirmar</button>
     </div>
   </section>
 
@@ -452,9 +539,10 @@ let rideListenerRef = null;
 let driversListenerRef = null;
 
 // ---------- maps ----------
-let map, rideMap;
+let map, rideMap, viagemMap;
 let originMarker, destMarker, driverMarker;
 let rideOriginMarker, rideDestMarker, rideDriverMarker;
+let viagemOriginMarker, viagemDestMarker, viagemLine;
 const driverMarkersHome = {};
 
 function initMaps(){
@@ -466,6 +554,9 @@ function initMaps(){
 
   rideMap = L.map('rideMap', { zoomControl:false, attributionControl:false }).setView([-27.234, -52.024], 14);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom:19 }).addTo(rideMap);
+
+  viagemMap = L.map('viagemMap', { zoomControl:false, attributionControl:false }).setView([-27.234, -52.024], 14);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom:19 }).addTo(viagemMap);
 
   if (navigator.geolocation){
     navigator.geolocation.getCurrentPosition(pos=>{
@@ -502,59 +593,93 @@ async function detectarCidade(){
   } catch(err){ console.warn('reverse geocoding falhou', err); }
 }
 
-map_clicks_pending: false;
-
-function onMapReadyClicks(){
-  map.on('click', async (e)=>{
-    setDestino({ lat:e.latlng.lat, lng:e.latlng.lng }, 'Local selecionado no mapa');
-  });
-}
+// ---------- navegação entre telas de pedido de corrida ----------
+$('btnAbrirDestino').addEventListener('click', ()=>{
+  showScreen('screen-destino');
+  $('inputDestino').value = '';
+  $('btnConfirmarDestino').disabled = true;
+  mostrarRecentesFavoritos();
+  setTimeout(()=> $('inputDestino').focus(), 200);
+});
+$('btnDestinoVoltar').addEventListener('click', ()=>{ showScreen('screen-home'); setNav('home'); });
+$('btnViagemVoltar').addEventListener('click', ()=>{ showScreen('screen-destino'); });
 
 function setDestino(loc, label){
   destLoc = { ...loc, label };
   $('inputDestino').value = label;
+  $('inputDestinoResumo').value = label;
   $('suggestions').innerHTML = '';
-  if (destMarker) map.removeLayer(destMarker);
-  destMarker = L.marker([loc.lat, loc.lng], { icon: pinIcon('destino','📍') }).addTo(map);
-  if (userLoc){
-    const km = haversineKm(userLoc, loc);
-    const fare = calcFare(km);
-    $('fareRow').style.display='flex';
-    $('fareValue').textContent = brl(fare);
-    $('distEta').textContent = `${km.toFixed(1)} km · ~${Math.max(3, Math.round(km*2.4))} min`;
-    $('btnSolicitar').disabled = false;
-    $('btnSolicitar').textContent = 'Solicitar corrida';
-    map.fitBounds(L.latLngBounds([[userLoc.lat,userLoc.lng],[loc.lat,loc.lng]]), { padding:[60,60] });
-  }
+  $('btnConfirmarDestino').disabled = false;
 }
+
+$('btnConfirmarDestino').addEventListener('click', ()=>{
+  if (!destLoc) return;
+  abrirEscolhaViagem();
+});
 
 // ---------- geocoding via Nominatim ----------
 let geoTimer = null;
 $('inputDestino').addEventListener('input', (e)=>{
   clearTimeout(geoTimer);
   const q = e.target.value.trim();
-  if (q.length < 3){ $('suggestions').innerHTML=''; return; }
+  if (q.length < 3){ mostrarRecentesFavoritos(); return; }
   geoTimer = setTimeout(()=>buscarEndereco(q), 450);
 });
+
+async function mostrarRecentesFavoritos(){
+  const box = $('suggestions');
+  box.innerHTML = '';
+  if (!currentUser){ return; }
+  try{
+    const q = query(ref(db, 'corridas'), orderByChild('passageiroId'), equalTo(currentUser.uid));
+    const snap = await get(q);
+    const data = snap.val() || {};
+    const recentes = Object.values(data)
+      .filter(r => r.destino && r.destino.endereco)
+      .sort((a,b)=>(b.criadoEm||0)-(a.criadoEm||0))
+      .slice(0,3);
+    if (recentes.length){
+      box.innerHTML += `<div class="sugg-section-label">Recentes</div>`;
+      recentes.forEach(r=>{
+        const div = document.createElement('div');
+        div.className = 'sugg-item fav';
+        div.innerHTML = `<span class="ic">🕑</span><span class="txt"><span class="t1">${r.destino.endereco.split(',')[0]}</span><br><span class="t2">${r.destino.endereco.split(',').slice(1).join(',').trim() || cidadeAtual}</span></span>`;
+        div.onclick = ()=> setDestino({ lat:r.destino.lat, lng:r.destino.lng }, r.destino.endereco);
+        box.appendChild(div);
+      });
+    }
+  } catch(err){ console.warn('histórico indisponível', err); }
+}
+
 async function buscarEndereco(q){
   try{
-    let url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=br&q=${encodeURIComponent(q)}`;
+    const cidadeBusca = cidadeAtual ? `${q}, ${cidadeAtual}` : q;
+    let url = `https://nominatim.openstreetmap.org/search?format=json&limit=8&countrycodes=br&q=${encodeURIComponent(cidadeBusca)}`;
     if (userLoc){
-      const d = 0.6; // ~60km de raio de prioridade
-      url += `&viewbox=${userLoc.lng-d},${userLoc.lat+d},${userLoc.lng+d},${userLoc.lat-d}&bounded=0`;
+      const d = 0.18; // ~20km de raio, foco na cidade atual
+      url += `&viewbox=${userLoc.lng-d},${userLoc.lat+d},${userLoc.lng+d},${userLoc.lat-d}&bounded=1`;
     }
     const res = await fetch(url, { headers: { 'Accept-Language':'pt-BR' } });
-    const data = await res.json();
+    let data = await res.json();
+
+    // se a busca "fechada" na cidade não achar nada, tenta de novo sem travar tanto
+    if (!data.length){
+      let url2 = `https://nominatim.openstreetmap.org/search?format=json&limit=6&countrycodes=br&q=${encodeURIComponent(cidadeBusca)}`;
+      const res2 = await fetch(url2, { headers: { 'Accept-Language':'pt-BR' } });
+      data = await res2.json();
+    }
+
     const box = $('suggestions');
     box.innerHTML = '';
     if (!data.length){
-      box.innerHTML = `<div class="sugg-item" style="color:var(--ink-soft); cursor:default;">Nenhum endereço encontrado no Brasil</div>`;
+      box.innerHTML = `<div class="sugg-item" style="color:var(--ink-soft); cursor:default;">Nenhum endereço encontrado${cidadeAtual ? ' em '+cidadeAtual : ' no Brasil'}</div>`;
       return;
     }
     data.forEach(item=>{
+      const partes = item.display_name.split(',');
       const div = document.createElement('div');
-      div.className = 'sugg-item';
-      div.textContent = item.display_name;
+      div.className = 'sugg-item fav';
+      div.innerHTML = `<span class="ic">📍</span><span class="txt"><span class="t1">${partes[0]}</span><br><span class="t2">${partes.slice(1,3).join(',').trim()}</span></span>`;
       div.onclick = ()=> setDestino({ lat:parseFloat(item.lat), lng:parseFloat(item.lon) }, item.display_name);
       box.appendChild(div);
     });
@@ -567,6 +692,15 @@ document.querySelectorAll('.pay-chip').forEach(chip=>{
     document.querySelectorAll('.pay-chip').forEach(c=>c.classList.remove('active'));
     chip.classList.add('active');
     selectedPay = chip.dataset.pay;
+  });
+});
+
+// ---------- agora / agendar toggle ----------
+document.querySelectorAll('.ag-chip').forEach(chip=>{
+  chip.addEventListener('click', ()=>{
+    if (chip.dataset.modo === 'agendar'){ toast('Agendamento chega em breve 🙂'); return; }
+    document.querySelectorAll('.ag-chip').forEach(c=>c.classList.remove('active'));
+    chip.classList.add('active');
   });
 });
 
@@ -597,16 +731,66 @@ function listenDrivers(){
   });
 }
 
+// ---------- escolha de categoria / veículo ----------
+const CATEGORIAS = [
+  { id:'economia', emoji:'🚗', nome:'77PromoX Economia', cap:4, desc:'A opção mais econômica', mult:1 },
+  { id:'eletrico', emoji:'⚡', nome:'Carros Elétricos', cap:4, desc:'Silenciosos e sustentáveis', mult:1.0 },
+  { id:'premium', emoji:'🚙', nome:'Confort Premium', cap:4, desc:'Maior conforto nas viagens', mult:1.45 },
+];
+let categoriaSelecionada = CATEGORIAS[0];
+let kmAtual = 0;
+
+function abrirEscolhaViagem(){
+  showScreen('screen-viagem');
+  setTimeout(()=>{
+    viagemMap.invalidateSize();
+    if (viagemOriginMarker) viagemMap.removeLayer(viagemOriginMarker);
+    if (viagemDestMarker) viagemMap.removeLayer(viagemDestMarker);
+    if (viagemLine) viagemMap.removeLayer(viagemLine);
+    viagemOriginMarker = L.marker([userLoc.lat, userLoc.lng], { icon: pinIcon('origem','●') }).addTo(viagemMap);
+    viagemDestMarker = L.marker([destLoc.lat, destLoc.lng], { icon: pinIcon('destino','🏁') }).addTo(viagemMap);
+    viagemLine = L.polyline([[userLoc.lat,userLoc.lng],[destLoc.lat,destLoc.lng]], { color:'#21242C', weight:3, dashArray:'1,10' }).addTo(viagemMap);
+    viagemMap.fitBounds(L.latLngBounds([[userLoc.lat,userLoc.lng],[destLoc.lat,destLoc.lng]]), { padding:[36,36] });
+  }, 150);
+
+  kmAtual = haversineKm(userLoc, destLoc);
+  renderCategorias();
+}
+
+function renderCategorias(){
+  const list = $('categoriaList');
+  list.innerHTML = '';
+  const base = calcFare(kmAtual);
+  CATEGORIAS.forEach(cat=>{
+    const preco = base * cat.mult;
+    cat._preco = preco;
+    const card = document.createElement('div');
+    card.className = 'cat-card' + (cat.id === categoriaSelecionada.id ? ' selected' : '');
+    card.innerHTML = `
+      <span class="emoji">${cat.emoji}</span>
+      <span class="info">
+        <span class="nome">${cat.nome} <span class="cap">👤 ${cat.cap}</span></span>
+        <span class="desc">${cat.desc}</span>
+      </span>
+      <span class="preco">${brl(preco)}</span>`;
+    card.onclick = ()=>{ categoriaSelecionada = cat; renderCategorias(); };
+    list.appendChild(card);
+  });
+  $('btnSolicitar').textContent = `Confirmar ${categoriaSelecionada.nome}`;
+}
+
 // ---------- solicitar corrida ----------
 $('btnSolicitar').addEventListener('click', async ()=>{
   if (!destLoc || !userLoc || !currentUser) return;
   const km = haversineKm(userLoc, destLoc);
-  const valor = calcFare(km);
+  const valor = categoriaSelecionada._preco || calcFare(km);
   const rideRef = push(ref(db, 'corridas'));
   activeRideId = rideRef.key;
   await set(rideRef, {
     passageiroId: currentUser.uid,
     passageiroNome: currentUser.displayName || 'Passageiro',
+    categoria: categoriaSelecionada.id,
+    categoriaNome: categoriaSelecionada.nome,
     origem: { lat:userLoc.lat, lng:userLoc.lng, endereco:'Local atual' },
     destino: { lat:destLoc.lat, lng:destLoc.lng, endereco:destLoc.label },
     pagamento: selectedPay,
@@ -692,10 +876,8 @@ function voltarParaHome(){
   activeRideId = null;
   destLoc = null;
   $('inputDestino').value = '';
-  $('fareRow').style.display = 'none';
-  $('btnSolicitar').disabled = true;
-  $('btnSolicitar').textContent = 'Escolha um destino';
-  if (destMarker){ map.removeLayer(destMarker); destMarker=null; }
+  $('inputDestinoResumo').value = '';
+  categoriaSelecionada = CATEGORIAS[0];
   showScreen('screen-home');
   setNav('home');
 }
@@ -849,7 +1031,6 @@ onAuthStateChanged(auth, (user)=>{
     setNav('home');
     if (!mapsBooted){
       initMaps();
-      onMapReadyClicks();
       listenDrivers();
       mapsBooted = true;
     } else {
