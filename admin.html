@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RideApp — Admin</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; min-height: 100vh; background: #f5f5f5; }
+
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 24px; background: #1a1a2e; color: white; font-weight: 600;
+    }
+    .btn-sair {
+      background: transparent; border: 1px solid rgba(255,255,255,0.4);
+      color: white; padding: 6px 14px; border-radius: 6px; cursor: pointer;
+    }
+
+    .abas { display: flex; background: white; border-bottom: 2px solid #eee; padding: 0 24px; flex-wrap: wrap; }
+    .aba {
+      padding: 14px 20px; border: none; background: transparent;
+      cursor: pointer; font-size: 14px; color: #666;
+      border-bottom: 2px solid transparent; margin-bottom: -2px;
+    }
+    .aba.ativa { color: #2563eb; border-bottom-color: #2563eb; font-weight: 700; }
+
+    .conteudo { padding: 24px; }
+
+    /* Cards de resumo */
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+    .card-stat {
+      background: white; border-radius: 12px; padding: 20px;
+      text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      border-top: 4px solid #e5e7eb;
+    }
+    .card-stat.verde { border-top-color: #10b981; }
+    .card-stat.azul { border-top-color: #2563eb; }
+    .card-stat.amarelo { border-top-color: #f59e0b; }
+    .num { display: block; font-size: 36px; font-weight: 800; }
+    .lab { font-size: 12px; color: #6b7280; margin-top: 4px; display: block; }
+
+    /* Tabela */
+    .tabela-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; }
+    th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+    th { background: #f9fafb; font-weight: 700; color: #374151; }
+    tr:hover td { background: #f9fafb; }
+
+    .btn-aprovar { padding: 6px 14px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    .btn-bloquear { padding: 6px 14px; background: #dc2626; color: white; border: none; border-radius: 6px; cursor: pointer; }
+
+    .vazio { text-align: center; color: #9ca3af; padding: 40px; }
+    .oculto { display: none !important; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span>⚙️ RideApp — Admin</span>
+  <button class="btn-sair" onclick="sair()">Sair</button>
+</header>
+
+<div class="abas">
+  <button class="aba ativa" onclick="trocarAba('resumo', this)">📊 Resumo</button>
+  <button class="aba" onclick="trocarAba('corridas', this)">🚖 Corridas</button>
+  <button class="aba" onclick="trocarAba('motoristas', this)">🚗 Motoristas</button>
+  <button class="aba" onclick="trocarAba('passageiros', this)">🧑 Passageiros</button>
+</div>
+
+<div class="conteudo">
+  <!-- Resumo -->
+  <div id="aba-resumo">
+    <div class="cards">
+      <div class="card-stat"><span class="num" id="total-corridas">0</span><span class="lab">Total corridas</span></div>
+      <div class="card-stat verde"><span class="num" id="total-finalizadas">0</span><span class="lab">Finalizadas</span></div>
+      <div class="card-stat azul"><span class="num" id="total-andamento">0</span><span class="lab">Em andamento</span></div>
+      <div class="card-stat amarelo"><span class="num" id="total-procurando">0</span><span class="lab">Procurando</span></div>
+      <div class="card-stat"><span class="num" id="total-motoristas">0</span><span class="lab">Motoristas</span></div>
+      <div class="card-stat"><span class="num" id="total-passageiros">0</span><span class="lab">Passageiros</span></div>
+    </div>
+  </div>
+
+  <!-- Corridas -->
+  <div id="aba-corridas" class="oculto tabela-wrap">
+    <table>
+      <thead><tr><th>ID</th><th>Destino</th><th>Pagamento</th><th>Status</th><th>Valor</th></tr></thead>
+      <tbody id="tbody-corridas"><tr><td colspan="5" class="vazio">Carregando...</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Motoristas -->
+  <div id="aba-motoristas" class="oculto tabela-wrap">
+    <table>
+      <thead><tr><th>Nome</th><th>E-mail</th><th>Telefone</th><th>Status</th><th>Ação</th></tr></thead>
+      <tbody id="tbody-motoristas"><tr><td colspan="5" class="vazio">Carregando...</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Passageiros -->
+  <div id="aba-passageiros" class="oculto tabela-wrap">
+    <table>
+      <thead><tr><th>Nome</th><th>E-mail</th><th>Telefone</th></tr></thead>
+      <tbody id="tbody-passageiros"><tr><td colspan="3" class="vazio">Carregando...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getAuth, onAuthStateChanged, signOut }
+    from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+  import { getFirestore, collection, onSnapshot, doc, updateDoc, query, orderBy }
+    from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBu6LwKxIOxx-gTFIPYOJrjFqU0Kpj98HI",
+    authDomain: "meu-app-passageiro.firebaseapp.com",
+    databaseURL: "https://meu-app-passageiro-default-rtdb.firebaseio.com",
+    projectId: "meu-app-passageiro",
+    storageBucket: "meu-app-passageiro.firebasestorage.app",
+    messagingSenderId: "638222729850",
+    appId: "1:638222729850:web:b2ce8c66bc7de8612731c3"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  onAuthStateChanged(auth, (u) => {
+    if (!u) { window.location.href = "index.html"; return; }
+    escutar();
+  });
+
+  const statusLabel = {
+    procurando: "🔍 Procurando", aceita: "✅ Aceita",
+    em_andamento: "🚗 Em andamento", finalizada: "🏁 Finalizada", cancelada: "❌ Cancelada",
+  };
+
+  function escutar() {
+    // Corridas
+    onSnapshot(query(collection(db, "corridas"), orderBy("criadoEm", "desc")), (snap) => {
+      const corridas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      document.getElementById("total-corridas").textContent = corridas.length;
+      document.getElementById("total-finalizadas").textContent = corridas.filter(c => c.status === "finalizada").length;
+      document.getElementById("total-andamento").textContent = corridas.filter(c => c.status === "em_andamento").length;
+      document.getElementById("total-procurando").textContent = corridas.filter(c => c.status === "procurando").length;
+      document.getElementById("tbody-corridas").innerHTML = corridas.length === 0
+        ? '<tr><td colspan="5" class="vazio">Nenhuma corrida ainda.</td></tr>'
+        : corridas.map(c => `
+          <tr>
+            <td><small>${c.id.slice(0,8)}...</small></td>
+            <td>${c.enderecoDestino}</td>
+            <td>${c.formaPagamento}</td>
+            <td>${statusLabel[c.status] || c.status}</td>
+            <td>${c.valor ? "R$ " + c.valor.toFixed(2) : "—"}</td>
+          </tr>`).join("");
+    });
+
+    // Motoristas
+    onSnapshot(collection(db, "motoristas"), (snap) => {
+      const mots = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      document.getElementById("total-motoristas").textContent = mots.length;
+      document.getElementById("tbody-motoristas").innerHTML = mots.length === 0
+        ? '<tr><td colspan="5" class="vazio">Nenhum motorista cadastrado.</td></tr>'
+        : mots.map(m => `
+          <tr>
+            <td>${m.nome || "—"}</td>
+            <td>${m.email}</td>
+            <td>${m.telefone || "—"}</td>
+            <td>${m.aprovado ? "✅ Aprovado" : "⏳ Pendente"}</td>
+            <td>
+              ${!m.aprovado
+                ? `<button class="btn-aprovar" onclick="aprovar('${m.id}')">Aprovar</button>`
+                : `<button class="btn-bloquear" onclick="bloquear('${m.id}')">Bloquear</button>`}
+            </td>
+          </tr>`).join("");
+    });
+
+    // Passageiros
+    onSnapshot(collection(db, "passageiros"), (snap) => {
+      const pass = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      document.getElementById("total-passageiros").textContent = pass.length;
+      document.getElementById("tbody-passageiros").innerHTML = pass.length === 0
+        ? '<tr><td colspan="3" class="vazio">Nenhum passageiro cadastrado.</td></tr>'
+        : pass.map(p => `
+          <tr>
+            <td>${p.nome || "—"}</td>
+            <td>${p.email}</td>
+            <td>${p.telefone || "—"}</td>
+          </tr>`).join("");
+    });
+  }
+
+  window.aprovar = async (id) => await updateDoc(doc(db, "motoristas", id), { aprovado: true });
+  window.bloquear = async (id) => await updateDoc(doc(db, "motoristas", id), { aprovado: false });
+  window.sair = async () => { await signOut(auth); window.location.href = "index.html"; };
+
+  window.trocarAba = (aba, el) => {
+    document.querySelectorAll(".aba").forEach(a => a.classList.remove("ativa"));
+    el.classList.add("ativa");
+    ["resumo","corridas","motoristas","passageiros"].forEach(a => {
+      document.getElementById("aba-" + a).classList.toggle("oculto", a !== aba);
+    });
+  };
+</script>
+</body>
+</html>
