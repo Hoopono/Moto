@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RideApp — Passageiro</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; }
+
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 24px; background: #1a1a2e; color: white; font-weight: 600;
+    }
+    .btn-sair {
+      background: transparent; border: 1px solid rgba(255,255,255,0.4);
+      color: white; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    }
+
+    .corpo { display: flex; flex: 1; overflow: hidden; }
+    #mapa { flex: 1; }
+
+    aside {
+      width: 300px; background: white; padding: 20px;
+      display: flex; flex-direction: column; gap: 14px;
+      box-shadow: -2px 0 12px rgba(0,0,0,0.1); overflow-y: auto;
+    }
+    aside h2 { font-size: 18px; }
+
+    .info-destino {
+      background: #eff6ff; border: 1px solid #bfdbfe;
+      border-radius: 8px; padding: 12px; font-size: 13px; color: #1d4ed8;
+    }
+
+    select, input {
+      width: 100%; padding: 10px 12px;
+      border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 14px;
+    }
+    label { font-size: 13px; font-weight: 600; color: #374151; }
+
+    .btn-solicitar {
+      padding: 14px; background: #2563eb; color: white;
+      border: none; border-radius: 8px; font-size: 15px;
+      font-weight: 700; cursor: pointer; transition: background 0.2s;
+    }
+    .btn-solicitar:hover:not(:disabled) { background: #1d4ed8; }
+    .btn-solicitar:disabled { background: #93c5fd; cursor: not-allowed; }
+
+    .status-box {
+      text-align: center; padding: 20px;
+      background: #f0fdf4; border: 1px solid #bbf7d0;
+      border-radius: 10px;
+    }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid #e5e7eb;
+      border-top-color: #2563eb; border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .btn-cancelar {
+      margin-top: 10px; width: 100%; padding: 10px;
+      background: transparent; color: #dc2626;
+      border: 1px solid #dc2626; border-radius: 8px; cursor: pointer;
+    }
+
+    hr { border: none; border-top: 1px solid #e5e7eb; }
+    .link-hist {
+      text-align: center; color: #2563eb; text-decoration: none;
+      font-size: 14px; padding: 10px;
+      border: 1px solid #dbeafe; border-radius: 8px; background: #eff6ff;
+      display: block;
+    }
+    .oculto { display: none !important; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span>🚖 RideApp — Passageiro</span>
+  <button class="btn-sair" onclick="sair()">Sair</button>
+</header>
+
+<div class="corpo">
+  <div id="mapa"></div>
+
+  <aside>
+    <h2>Para onde vamos?</h2>
+
+    <!-- Estado: escolhendo destino -->
+    <div id="painel-escolha">
+      <p class="info-destino" id="info-destino">Clique no mapa para escolher o destino</p>
+      <label>Pagamento</label>
+      <select id="pagamento">
+        <option value="dinheiro">💵 Dinheiro</option>
+        <option value="pix">📱 PIX</option>
+        <option value="cartao">💳 Cartão</option>
+      </select>
+      <button class="btn-solicitar" id="btn-solicitar" onclick="solicitar()" disabled>
+        Solicitar corrida
+      </button>
+    </div>
+
+    <!-- Estado: aguardando motorista -->
+    <div id="painel-aguardando" class="oculto">
+      <div class="status-box">
+        <div class="spinner"></div>
+        <p><strong>Procurando motorista...</strong></p>
+        <small id="id-corrida"></small>
+        <button class="btn-cancelar" onclick="cancelar()">Cancelar corrida</button>
+      </div>
+    </div>
+
+    <hr/>
+    <a href="historico.html" class="link-hist">📋 Histórico de viagens</a>
+  </aside>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getAuth, onAuthStateChanged, signOut }
+    from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+  import { getFirestore, collection, addDoc, doc, updateDoc }
+    from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBu6LwKxIOxx-gTFIPYOJrjFqU0Kpj98HI",
+    authDomain: "meu-app-passageiro.firebaseapp.com",
+    databaseURL: "https://meu-app-passageiro-default-rtdb.firebaseio.com",
+    projectId: "meu-app-passageiro",
+    storageBucket: "meu-app-passageiro.firebasestorage.app",
+    messagingSenderId: "638222729850",
+    appId: "1:638222729850:web:b2ce8c66bc7de8612731c3"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  let usuario = null;
+  let destino = null;
+  let corridaId = null;
+  const origem = { lat: -23.5505, lng: -46.6333 }; // São Paulo
+
+  // Verifica se está logado
+  onAuthStateChanged(auth, (u) => {
+    if (!u) { window.location.href = "index.html"; return; }
+    usuario = u;
+  });
+
+  // Monta o mapa
+  const mapa = L.map("mapa").setView([origem.lat, origem.lng], 13);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
+  }).addTo(mapa);
+
+  // Marca origem (você)
+  L.marker([origem.lat, origem.lng])
+    .addTo(mapa)
+    .bindPopup("📍 Você está aqui")
+    .openPopup();
+
+  let marcadorDestino = null;
+
+  // Clique no mapa seleciona destino
+  mapa.on("click", (e) => {
+    destino = { lat: e.latlng.lat, lng: e.latlng.lng };
+    if (marcadorDestino) mapa.removeLayer(marcadorDestino);
+    marcadorDestino = L.marker([destino.lat, destino.lng])
+      .addTo(mapa)
+      .bindPopup("🏁 Destino")
+      .openPopup();
+    document.getElementById("info-destino").textContent =
+      `✅ Destino: ${destino.lat.toFixed(4)}, ${destino.lng.toFixed(4)}`;
+    document.getElementById("btn-solicitar").disabled = false;
+  });
+
+  window.solicitar = async () => {
+    if (!destino || !usuario) return;
+    document.getElementById("btn-solicitar").disabled = true;
+    document.getElementById("btn-solicitar").textContent = "Solicitando...";
+    const pagamento = document.getElementById("pagamento").value;
+    const docRef = await addDoc(collection(db, "corridas"), {
+      passageiroId: usuario.uid,
+      motoristaId: null,
+      origemLat: origem.lat, origemLng: origem.lng,
+      destinoLat: destino.lat, destinoLng: destino.lng,
+      enderecoDestino: `${destino.lat.toFixed(4)}, ${destino.lng.toFixed(4)}`,
+      status: "procurando",
+      formaPagamento: pagamento,
+      valor: null,
+      criadoEm: Date.now(),
+    });
+    corridaId = docRef.id;
+    document.getElementById("id-corrida").textContent = "ID: " + corridaId;
+    document.getElementById("painel-escolha").classList.add("oculto");
+    document.getElementById("painel-aguardando").classList.remove("oculto");
+  };
+
+  window.cancelar = async () => {
+    if (corridaId) {
+      await updateDoc(doc(db, "corridas", corridaId), { status: "cancelada" });
+    }
+    document.getElementById("painel-escolha").classList.remove("oculto");
+    document.getElementById("painel-aguardando").classList.add("oculto");
+    document.getElementById("btn-solicitar").disabled = false;
+    document.getElementById("btn-solicitar").textContent = "Solicitar corrida";
+    destino = null; corridaId = null;
+    if (marcadorDestino) { mapa.removeLayer(marcadorDestino); marcadorDestino = null; }
+    document.getElementById("info-destino").textContent = "Clique no mapa para escolher o destino";
+  };
+
+  window.sair = async () => {
+    await signOut(auth);
+    window.location.href = "index.html";
+  };
+</script>
+</body>
+</html>
