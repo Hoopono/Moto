@@ -1,193 +1,810 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>RideApp — Motorista</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Segoe UI', sans-serif; min-height: 100vh; background: #f5f5f5; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Rota77 · Motorista</title>
 
-    header {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 12px 24px; background: #1a1a2e; color: white; font-weight: 600;
-    }
-    .btn-sair {
-      background: transparent; border: 1px solid rgba(255,255,255,0.4);
-      color: white; padding: 6px 14px; border-radius: 6px; cursor: pointer;
-    }
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 
-    .abas { display: flex; background: white; border-bottom: 2px solid #eee; padding: 0 24px; }
-    .aba {
-      padding: 14px 20px; border: none; background: transparent;
-      cursor: pointer; font-size: 14px; color: #666;
-      border-bottom: 2px solid transparent; margin-bottom: -2px;
-    }
-    .aba.ativa { color: #2563eb; border-bottom-color: #2563eb; font-weight: 700; }
+<style>
+  :root{
+    --asphalt:#21242C; --asphalt-2:#2B2F39; --concrete:#F3F1EB; --concrete-dim:#E4E1D8;
+    --amber:#FFB100; --amber-dim:#7A5A12; --route-green:#2F9E68; --brake-red:#E14F4F;
+    --ink:#1B1D22; --ink-soft:#5B5E68; --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--asphalt); font-family:'Inter',sans-serif; color:var(--ink); -webkit-font-smoothing:antialiased;}
+  h1,h2,h3,.display{font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:.03em;}
+  .mono{font-family:'JetBrains Mono',monospace;}
 
-    .lista { padding: 24px; display: flex; flex-direction: column; gap: 16px; max-width: 800px; margin: 0 auto; }
+  #app{ max-width:430px; margin:0 auto; min-height:100vh; background:var(--concrete); position:relative; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 0 60px rgba(0,0,0,.5); }
 
-    .card {
-      background: white; border-radius: 12px; padding: 20px;
-      display: flex; align-items: center; justify-content: space-between;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.07); border: 1px solid #e5e7eb;
-    }
-    .card p { font-size: 14px; margin-bottom: 4px; color: #374151; }
+  .screen{display:none; flex-direction:column; flex:1; min-height:0;}
+  .screen.active{display:flex;}
 
-    .btn-aceitar {
-      padding: 10px 20px; background: #2563eb; color: white;
-      border: none; border-radius: 8px; font-weight: 700; cursor: pointer;
-    }
-    .btn-aceitar:hover { background: #1d4ed8; }
+  /* ---- AUTH ---- */
+  #screen-auth{ background:var(--asphalt); color:var(--concrete); padding:32px 26px; overflow-y:auto;
+    background-image: radial-gradient(circle at 80% 0%, rgba(255,177,0,.08), transparent 50%), repeating-linear-gradient(180deg, transparent 0 38px, rgba(255,255,255,.025) 38px 40px); }
+  .brand{display:flex; align-items:baseline; gap:8px; margin-bottom:6px;}
+  .brand .mark{ width:34px; height:34px; border-radius:8px; background:var(--amber); display:flex; align-items:center; justify-content:center; font-family:'Oswald'; font-weight:700; color:var(--ink); font-size:18px; flex:none; }
+  .brand h1{font-size:24px; margin:0; color:var(--concrete);}
+  .brand h1 span{color:var(--amber);}
+  .brand .role{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--route-green); font-weight:700; margin-left:4px;}
+  .tagline{color:#9A9DA8; font-size:13px; margin:0 0 28px;}
 
-    .btn-acao {
-      padding: 8px 16px; background: #f59e0b; color: white;
-      border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 6px;
-    }
-    .btn-acao.verde { background: #10b981; }
+  .field{margin-bottom:13px;}
+  .field label{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:#9A9DA8; margin-bottom:6px;}
+  .field input,.field select{ width:100%; padding:12px 13px; border-radius:10px; border:1px solid #3A3E49; background:#1A1C23; color:var(--concrete); font-size:14.5px; font-family:'Inter'; }
+  .field input:focus,.field select:focus{outline:2px solid var(--amber); border-color:var(--amber);}
+  .field-row{display:flex; gap:10px;}
+  .field-row .field{flex:1;}
+  .section-label{font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--amber); font-weight:700; margin:18px 0 10px;}
 
-    .vazio { text-align: center; color: #9ca3af; padding: 40px; }
+  .btn{ display:inline-flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:14px; border-radius:10px; border:none; cursor:pointer; font-family:'Inter'; font-weight:700; font-size:15px; transition:transform .08s ease, filter .15s ease; }
+  .btn:active{transform:scale(.98);}
+  .btn-amber{background:var(--amber); color:#241A02;}
+  .btn-outline{background:transparent; border:1px solid #454956; color:var(--concrete);}
+  .btn-ghost-light{background:transparent; color:var(--ink-soft); font-weight:600; font-size:13.5px;}
+  .btn-dark{background:var(--ink); color:var(--concrete);}
+  .btn-red{background:var(--brake-red); color:#fff;}
+  .btn-green{background:var(--route-green); color:#fff;}
+  .btn:disabled{opacity:.5; cursor:not-allowed;}
 
-    .badge {
-      display: inline-block; padding: 2px 8px; border-radius: 99px;
-      font-size: 12px; font-weight: 600;
-    }
-    .badge-azul { background: #dbeafe; color: #1d4ed8; }
-    .badge-verde { background: #d1fae5; color: #065f46; }
-    .badge-amarelo { background: #fef3c7; color: #92400e; }
-    .badge-cinza { background: #f3f4f6; color: #6b7280; }
-  </style>
+  .auth-toggle{text-align:center; margin-top:16px; font-size:13.5px; color:#9A9DA8;}
+  .auth-toggle a{color:var(--amber); font-weight:600; cursor:pointer; text-decoration:none;}
+  .auth-error{ background:rgba(225,79,79,.12); border:1px solid rgba(225,79,79,.4); color:#ffb3b3; font-size:13px; padding:9px 12px; border-radius:8px; margin-bottom:14px; display:none; }
+
+  /* ---- TOP BAR ---- */
+  .topbar{ display:flex; align-items:center; justify-content:space-between; padding:16px 18px 12px; background:var(--concrete); }
+  .topbar .greet{font-size:12px; color:var(--ink-soft); margin:0 0 2px;}
+  .topbar h2{font-size:19px; margin:0; color:var(--ink);}
+  .iconbtn{ width:38px; height:38px; border-radius:50%; background:var(--ink); color:var(--concrete); display:flex; align-items:center; justify-content:center; cursor:pointer; border:none; font-size:16px; }
+  .iconbtn.alt{background:var(--concrete-dim); color:var(--ink);}
+
+  /* ---- ONLINE TOGGLE ---- */
+  .online-pill{ display:flex; align-items:center; gap:10px; background:var(--ink); color:#fff; border-radius:14px; padding:5px; }
+  .online-pill .lbl{font-size:11.5px; font-weight:700; padding:0 4px;}
+  .switch{ width:46px; height:26px; border-radius:14px; background:#454956; position:relative; cursor:pointer; flex:none; transition:background .2s; }
+  .switch.on{background:var(--route-green);}
+  .switch .knob{ width:20px; height:20px; border-radius:50%; background:#fff; position:absolute; top:3px; left:3px; transition:left .2s; box-shadow:0 1px 4px rgba(0,0,0,.3); }
+  .switch.on .knob{left:23px;}
+
+  /* ---- HOME ---- */
+  #screen-home{position:relative;}
+  .map-wrap{position:relative; flex:1; min-height:0; display:flex;}
+  .map-wrap::after{ content:''; position:absolute; left:0; right:0; bottom:0; height:46px; z-index:550; pointer-events:none; background:linear-gradient(180deg, transparent, var(--concrete) 92%); }
+  #map{flex:1; min-height:0; width:100%; background:#cfd3da;}
+  .leaflet-container{ font-family:'Inter', sans-serif; }
+  .leaflet-control-zoom{ border:none !important; box-shadow:0 3px 10px rgba(0,0,0,.18) !important; margin-bottom:18px !important; }
+  .leaflet-control-zoom a{ background:#fff !important; color:var(--ink) !important; border:none !important; }
+  .leaflet-control-zoom a:first-child{ border-radius:10px 10px 0 0 !important; }
+  .leaflet-control-zoom a:last-child{ border-radius:0 0 10px 10px !important; }
+  .leaflet-control-attribution{ font-size:9px !important; background:rgba(255,255,255,.75) !important; }
+
+  .status-banner{ position:absolute; top:14px; left:14px; right:14px; z-index:500; background:rgba(33,36,44,.92); color:#fff; border-radius:12px; padding:11px 14px; font-size:13px; display:flex; align-items:center; gap:9px; }
+  .status-banner .dot{width:8px; height:8px; border-radius:50%; flex:none;}
+  .status-banner .dot.off{background:#9A9DA8;}
+  .status-banner .dot.on{background:var(--route-green); box-shadow:0 0 0 0 rgba(47,158,104,.6); animation:pulse2 1.8s infinite;}
+  @keyframes pulse2{0%{box-shadow:0 0 0 0 rgba(47,158,104,.55);}70%{box-shadow:0 0 0 9px rgba(47,158,104,0);}100%{box-shadow:0 0 0 0 rgba(47,158,104,0);}}
+
+  .earnings-strip{ background:var(--concrete); padding:14px 18px; display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--concrete-dim); }
+  .earnings-strip .lab{font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em;}
+  .earnings-strip .val{font-family:'JetBrains Mono'; font-weight:700; font-size:19px; color:var(--ink);}
+
+  .bottomnav{ display:flex; justify-content:space-around; align-items:center; padding:10px 0 14px; background:#fff; border-top:1px solid var(--concrete-dim); }
+  .navitem{display:flex; flex-direction:column; align-items:center; gap:3px; font-size:11px; color:var(--ink-soft); cursor:pointer; font-weight:600;}
+  .navitem.active{color:var(--ink);}
+  .navitem .ic{font-size:18px;}
+  .navitem.active .ic{color:var(--amber-dim);}
+
+  /* ---- INCOMING REQUEST MODAL ---- */
+  .modal-overlay{ position:absolute; inset:0; background:rgba(33,36,44,.6); z-index:1000; display:none; align-items:flex-end; justify-content:center; }
+  .modal-overlay.show{display:flex;}
+  .modal-card{ background:#fff; border-radius:20px 20px 0 0; width:100%; max-width:430px; padding:24px 22px 26px; }
+  .req-timer{ height:4px; border-radius:3px; background:var(--concrete-dim); overflow:hidden; margin-bottom:16px; }
+  .req-timer .bar{height:100%; background:var(--amber); width:100%; transform-origin:left;}
+  .req-row{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;}
+  .req-row .valor{font-family:'JetBrains Mono'; font-weight:700; font-size:26px; color:var(--route-green);}
+  .req-addr{display:flex; gap:10px; margin:14px 0 18px;}
+  .req-addr .dots{display:flex; flex-direction:column; align-items:center; padding-top:4px; width:12px;}
+  .req-addr-fields{flex:1; font-size:13.5px;}
+  .req-addr-fields .row{padding:7px 0; border-bottom:1px solid var(--concrete-dim);}
+  .req-addr-fields .row:last-child{border-bottom:none;}
+  .req-addr-fields .lab{font-size:10.5px; color:var(--ink-soft); text-transform:uppercase;}
+  .req-meta{display:flex; gap:14px; font-size:12.5px; color:var(--ink-soft); margin-bottom:18px;}
+  .req-actions{display:flex; gap:10px;}
+
+  /* ---- RIDE ACTIVE ---- */
+  #screen-corrida{background:var(--concrete);}
+  .ride-status-bar{ background:var(--ink); color:var(--concrete); padding:16px 18px; display:flex; align-items:center; gap:12px; }
+  .ride-status-bar .pulse{ width:10px; height:10px; border-radius:50%; background:var(--amber); flex:none; box-shadow:0 0 0 0 rgba(255,177,0,.7); animation:pulse 1.6s infinite; }
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,177,0,.55);}70%{box-shadow:0 0 0 10px rgba(255,177,0,0);}100%{box-shadow:0 0 0 0 rgba(255,177,0,0);}}
+  .ride-status-bar .t1{font-size:13px; color:#9A9DA8; margin-bottom:1px;}
+  .ride-status-bar .t2{font-weight:700; font-size:15.5px;}
+  #corridaMap{height:240px; flex:none;}
+
+  .pax-card{ margin:14px; background:#fff; border-radius:14px; padding:14px; display:flex; gap:12px; align-items:center; border:1px solid var(--concrete-dim); }
+  .pax-avatar{width:46px; height:46px; border-radius:50%; background:var(--asphalt); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-family:'Oswald'; flex:none;}
+  .pax-info{flex:1; min-width:0;}
+  .pax-info .name{font-weight:700; font-size:15px;}
+  .pax-info .meta{font-size:12px; color:var(--ink-soft);}
+  .pax-actions{display:flex; gap:8px;}
+  .pax-actions .iconbtn{width:34px; height:34px; font-size:14px;}
+
+  .trip-detail{ background:#fff; border:1px solid var(--concrete-dim); border-radius:12px; padding:13px 14px; margin:0 18px 12px; }
+  .trip-detail .row1{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;}
+  .trip-detail .dest{font-weight:700; font-size:14.5px;}
+  .trip-detail .val{font-family:'JetBrains Mono'; font-weight:700;}
+  .trip-detail .meta{font-size:12px; color:var(--ink-soft);}
+
+  .ride-actions{padding:14px 18px; display:flex; flex-direction:column; gap:10px; margin-top:auto;}
+
+  /* ---- EARNINGS ---- */
+  .earn-hero{ background:var(--ink); color:#fff; padding:24px 20px; }
+  .earn-hero .lab{font-size:11.5px; text-transform:uppercase; letter-spacing:.08em; color:#9A9DA8;}
+  .earn-hero .val{font-family:'JetBrains Mono'; font-weight:700; font-size:34px; color:var(--amber); letter-spacing:.02em; margin:4px 0 14px;}
+  .earn-stats{display:flex; gap:10px;}
+  .earn-stat{flex:1; background:#2B2F39; border-radius:10px; padding:10px 12px;}
+  .earn-stat .n{font-family:'JetBrains Mono'; font-weight:700; font-size:16px;}
+  .earn-stat .l{font-size:10.5px; color:#9A9DA8; text-transform:uppercase; margin-top:2px;}
+
+  .withdraw-row{margin:16px 18px; display:flex; gap:10px;}
+  .trip-item{ background:#fff; border:1px solid var(--concrete-dim); border-radius:12px; padding:13px 14px; margin:0 16px 10px; }
+  .trip-item .row1{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;}
+  .trip-item .dest{font-weight:700; font-size:14.5px;}
+  .trip-item .val{font-family:'JetBrains Mono'; font-weight:700; color:var(--route-green);}
+  .trip-item .meta{font-size:12px; color:var(--ink-soft); display:flex; gap:10px;}
+  .trip-item .stars{color:var(--amber); letter-spacing:1px; font-size:12px;}
+
+  /* ---- RATING ---- */
+  .star-pick{display:flex; gap:10px; justify-content:center; margin:18px 0 22px; font-size:34px;}
+  .star-pick span{cursor:pointer; color:var(--concrete-dim); transition:color .1s;}
+  .star-pick span.on{color:var(--amber);}
+
+  .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; padding:11px 18px; border-radius:30px; font-size:13.5px; z-index:2000; opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; max-width:90%; text-align:center; }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(-6px);}
+
+  .center-empty{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 24px; text-align:center; color:var(--ink-soft);}
+  .center-empty .big{font-size:38px; margin-bottom:10px;}
+
+  .leaflet-div-icon{background:none; border:none;}
+  .pin{ width:30px; height:30px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); display:flex; align-items:center; justify-content:center; box-shadow:0 2px 6px rgba(0,0,0,.35); }
+  .pin.origem{background:var(--ink);} .pin.destino{background:var(--amber);} .pin.motorista{background:var(--route-green);}
+  .pin span{transform:rotate(45deg); font-size:13px;}
+
+  .pendente-badge{background:rgba(255,177,0,.15); color:var(--amber-dim); font-size:11px; font-weight:700; padding:6px 10px; border-radius:20px; display:inline-block; margin-top:8px;}
+
+  ::-webkit-scrollbar{width:5px;} ::-webkit-scrollbar-thumb{background:var(--concrete-dim); border-radius:3px;}
+</style>
 </head>
 <body>
 
-<header>
-  <span>🚗 RideApp — Motorista</span>
-  <button class="btn-sair" onclick="sair()">Sair</button>
-</header>
+<div id="app">
 
-<div class="abas">
-  <button class="aba ativa" onclick="trocarAba('disponiveis', this)">
-    Corridas disponíveis <span id="badge-disp">(0)</span>
-  </button>
-  <button class="aba" onclick="trocarAba('minhas', this)">
-    Minhas corridas <span id="badge-minhas">(0)</span>
-  </button>
+  <!-- ================= AUTH ================= -->
+  <section id="screen-auth" class="screen active">
+    <div class="brand"><div class="mark">R7</div><h1>Rota<span>77</span></h1><span class="role">Motorista</span></div>
+    <p class="tagline">Sua agenda, suas corridas, seus ganhos.</p>
+
+    <div class="auth-error" id="authError"></div>
+
+    <form id="formLogin">
+      <div class="field"><label>E-mail</label><input type="email" id="loginEmail" required placeholder="voce@email.com"></div>
+      <div class="field"><label>Senha</label><input type="password" id="loginSenha" required placeholder="••••••••"></div>
+      <button class="btn btn-amber" type="submit">Entrar</button>
+    </form>
+
+    <form id="formCadastro" style="display:none;">
+      <div class="section-label">Dados pessoais</div>
+      <div class="field"><label>Nome completo</label><input type="text" id="cadNome" required placeholder="Seu nome"></div>
+      <div class="field-row">
+        <div class="field"><label>E-mail</label><input type="email" id="cadEmail" required placeholder="voce@email.com"></div>
+        <div class="field"><label>Telefone</label><input type="tel" id="cadTelefone" required placeholder="(00) 00000-0000"></div>
+      </div>
+      <div class="field"><label>Senha</label><input type="password" id="cadSenha" required minlength="6" placeholder="mín. 6 caracteres"></div>
+
+      <div class="section-label">Documentos</div>
+      <div class="field-row">
+        <div class="field"><label>CPF</label><input type="text" id="cadCpf" required placeholder="000.000.000-00"></div>
+        <div class="field"><label>CNH (registro)</label><input type="text" id="cadCnh" required placeholder="00000000000"></div>
+      </div>
+
+      <div class="section-label">Veículo</div>
+      <div class="field-row">
+        <div class="field"><label>Modelo</label><input type="text" id="cadModelo" required placeholder="Ex.: Onix 2021"></div>
+        <div class="field"><label>Placa</label><input type="text" id="cadPlaca" required placeholder="ABC1D23"></div>
+      </div>
+      <div class="field"><label>Categoria</label>
+        <select id="cadCategoria">
+          <option value="economia">77PromoX Economia</option>
+          <option value="eletrico">Carro Elétrico</option>
+          <option value="premium">Confort Premium</option>
+        </select>
+      </div>
+
+      <button class="btn btn-amber" type="submit" style="margin-top:6px;">Enviar cadastro</button>
+      <p style="font-size:12px; color:#9A9DA8; text-align:center; margin-top:10px;">Seu cadastro passa por aprovação antes de liberar corridas.</p>
+    </form>
+
+    <div class="auth-toggle">
+      <span id="toggleText">Ainda não é motorista?</span> <a id="toggleLink">Cadastre-se</a>
+    </div>
+  </section>
+
+  <!-- ================= HOME ================= -->
+  <section id="screen-home" class="screen">
+    <div class="topbar">
+      <div><p class="greet" id="greetTime">Boa noite</p><h2 id="greetName">Motorista</h2></div>
+      <div class="online-pill">
+        <span class="lbl" id="onlineLbl">Offline</span>
+        <div class="switch" id="switchOnline"><div class="knob"></div></div>
+      </div>
+    </div>
+
+    <div class="map-wrap">
+      <div id="map"></div>
+      <div class="status-banner"><span class="dot off" id="statusDot"></span><span id="statusTxt">Você está offline — fique online para receber corridas</span></div>
+    </div>
+
+    <div class="earnings-strip">
+      <div><div class="lab">Hoje</div><div class="val" id="ganhoHoje">R$ 0,00</div></div>
+      <div style="text-align:right;"><div class="lab">Corridas</div><div class="val" id="corridasHoje">0</div></div>
+    </div>
+
+    <div class="bottomnav">
+      <div class="navitem active" data-nav="home"><span class="ic">⌂</span>Início</div>
+      <div class="navitem" data-nav="ganhos"><span class="ic">$</span>Ganhos</div>
+      <div class="navitem" data-nav="conta"><span class="ic">⎋</span>Conta</div>
+    </div>
+  </section>
+
+  <!-- ================= CORRIDA ATIVA ================= -->
+  <section id="screen-corrida" class="screen">
+    <div class="ride-status-bar">
+      <span class="pulse"></span>
+      <div><div class="t1" id="corridaStatusLabel">Indo até o passageiro</div><div class="t2" id="corridaStatusSub">Siga até o ponto de partida</div></div>
+    </div>
+    <div id="corridaMap"></div>
+
+    <div class="pax-card">
+      <div class="pax-avatar" id="paxInitial">—</div>
+      <div class="pax-info"><div class="name" id="paxNome">Passageiro</div><div class="meta" id="paxMeta">⭐ 5.0</div></div>
+      <div class="pax-actions">
+        <button class="iconbtn alt" title="Ligar">☏</button>
+        <button class="iconbtn alt" title="Mensagem">✉</button>
+      </div>
+    </div>
+
+    <div class="trip-detail">
+      <div class="row1"><span class="dest" id="corridaDestinoTxt">Destino</span><span class="val" id="corridaValorTxt">R$ 0,00</span></div>
+      <div class="meta" id="corridaPagamentoTxt">Pix</div>
+    </div>
+
+    <div class="ride-actions">
+      <button class="btn btn-green" id="btnIniciarViagem">Cheguei no local de partida</button>
+      <button class="btn btn-dark" id="btnFinalizarCorrida" style="display:none;">Finalizar corrida</button>
+      <button class="btn btn-outline" id="btnCancelarAceite">Cancelar aceite</button>
+    </div>
+  </section>
+
+  <!-- ================= GANHOS ================= -->
+  <section id="screen-ganhos" class="screen">
+    <div class="topbar">
+      <div><p class="greet">Seus ganhos</p><h2>Carteira</h2></div>
+      <button class="iconbtn alt" id="btnGanhosBack">←</button>
+    </div>
+    <div class="earn-hero">
+      <div class="lab">Saldo disponível</div>
+      <div class="val mono" id="saldoTotal">R$ 0,00</div>
+      <div class="earn-stats">
+        <div class="earn-stat"><div class="n" id="statHoje">R$ 0,00</div><div class="l">Hoje</div></div>
+        <div class="earn-stat"><div class="n" id="statSemana">R$ 0,00</div><div class="l">7 dias</div></div>
+        <div class="earn-stat"><div class="n" id="statTotal">R$ 0,00</div><div class="l">Total</div></div>
+      </div>
+    </div>
+    <div class="withdraw-row">
+      <button class="btn btn-amber" id="btnSacar">Solicitar saque via Pix</button>
+    </div>
+    <div id="ganhosList" style="overflow-y:auto; flex:1;"></div>
+  </section>
+
+  <!-- ================= CONTA ================= -->
+  <section id="screen-conta" class="screen">
+    <div class="topbar">
+      <div><p class="greet">Sua conta</p><h2 id="contaNome">Motorista</h2></div>
+      <button class="iconbtn alt" id="btnContaBack">←</button>
+    </div>
+    <div style="padding:18px;">
+      <div class="trip-detail" style="margin:0 0 14px;">
+        <div class="meta">Veículo</div>
+        <div class="dest" id="contaVeiculo" style="margin-top:2px;">—</div>
+      </div>
+      <div class="trip-detail" style="margin:0 0 14px;">
+        <div class="meta">Status do cadastro</div>
+        <div id="contaStatus" class="pendente-badge">Em análise</div>
+      </div>
+      <button class="btn btn-outline" id="btnLogout">Sair da conta</button>
+    </div>
+  </section>
+
+  <!-- solicitação de corrida -->
+  <div class="modal-overlay" id="reqOverlay">
+    <div class="modal-card">
+      <div class="req-timer"><div class="bar" id="reqBar"></div></div>
+      <div class="req-row"><span style="font-weight:700; font-size:15px;">Nova corrida</span><span class="valor mono" id="reqValor">R$ 0,00</span></div>
+      <div class="req-addr">
+        <div class="dots"><span style="width:9px;height:9px;border-radius:50%;background:var(--ink); display:block;"></span><span style="flex:1;width:2px;background:var(--concrete-dim); margin:4px 0; display:block;"></span><span style="width:9px;height:9px;border-radius:50%;background:var(--amber); display:block;"></span></div>
+        <div class="req-addr-fields">
+          <div class="row"><div class="lab">Buscar em</div><div id="reqOrigem">—</div></div>
+          <div class="row"><div class="lab">Levar até</div><div id="reqDestino">—</div></div>
+        </div>
+      </div>
+      <div class="req-meta"><span id="reqDistancia">—</span><span id="reqPagamento">—</span></div>
+      <div class="req-actions">
+        <button class="btn btn-outline" id="btnRecusar">Recusar</button>
+        <button class="btn btn-green" id="btnAceitar">Aceitar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- avaliação do passageiro -->
+  <div class="modal-overlay" id="ratingOverlay">
+    <div class="modal-card">
+      <h3 style="margin:0 0 4px;">Como foi com o passageiro?</h3>
+      <p style="margin:0; color:var(--ink-soft); font-size:13.5px;" id="ratingPaxName">Avalie a viagem</p>
+      <div class="star-pick" id="starPick">
+        <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
+      </div>
+      <button class="btn btn-amber" id="btnEnviarAvaliacao">Enviar avaliação</button>
+      <button class="btn btn-ghost-light" id="btnPularAvaliacao" style="margin-top:8px;">Agora não</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
 </div>
 
-<div class="lista" id="lista-disponiveis"></div>
-<div class="lista oculto" id="lista-minhas"></div>
-
-<style>.oculto { display: none !important; }</style>
-
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-  import { getAuth, onAuthStateChanged, signOut }
-    from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-  import { getFirestore, collection, query, where, onSnapshot, doc, updateDoc }
-    from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  onAuthStateChanged, signOut, updateProfile
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getDatabase, ref, set, push, onValue, update, get, query, orderByChild,
+  equalTo, off, serverTimestamp, remove
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyBu6LwKxIOxx-gTFIPYOJrjFqU0Kpj98HI",
-    authDomain: "meu-app-passageiro.firebaseapp.com",
-    databaseURL: "https://meu-app-passageiro-default-rtdb.firebaseio.com",
-    projectId: "meu-app-passageiro",
-    storageBucket: "meu-app-passageiro.firebasestorage.app",
-    messagingSenderId: "638222729850",
-    appId: "1:638222729850:web:b2ce8c66bc7de8612731c3"
+// ---------- Firebase ----------
+const firebaseConfig = {
+  apiKey: "AIzaSyBu6LwKxIOxx-gTFIPYOJrjFqU0Kpj98HI",
+  authDomain: "meu-app-passageiro.firebaseapp.com",
+  databaseURL: "https://meu-app-passageiro-default-rtdb.firebaseio.com",
+  projectId: "meu-app-passageiro",
+  storageBucket: "meu-app-passageiro.firebasestorage.app",
+  messagingSenderId: "638222729850",
+  appId: "1:638222729850:web:b2ce8c66bc7de8612731c3"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+
+// ---------- helpers ----------
+const $ = (id) => document.getElementById(id);
+function toast(msg, ms=2800){
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._timer); t._timer = setTimeout(()=>t.classList.remove('show'), ms);
+}
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  $(id).classList.add('active');
+}
+function brl(v){ return 'R$ ' + (v||0).toFixed(2).replace('.', ','); }
+function haversineKm(a,b){
+  const R=6371, dLat=(b.lat-a.lat)*Math.PI/180, dLng=(b.lng-a.lng)*Math.PI/180;
+  const s = Math.sin(dLat/2)**2 + Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(s), Math.sqrt(1-s));
+}
+function pinIcon(cls, emoji){
+  return L.divIcon({ className:'leaflet-div-icon', html:`<div class="pin ${cls}"><span>${emoji}</span></div>`, iconSize:[30,30], iconAnchor:[15,28] });
+}
+
+// ---------- state ----------
+let currentUser = null;
+let perfilMotorista = null;
+let userLoc = null;
+let online = false;
+let watchId = null;
+let map, corridaMap;
+let selfMarker, corridaOrigemMarker, corridaDestMarker;
+let corridasListenerRef = null;
+let activeRideId = null;
+let activeRideRef = null;
+let ratingRideId = null, ratingValue = 0;
+let reqTimerInterval = null;
+
+// ---------- maps ----------
+function initMaps(){
+  map = L.map('map', { zoomControl:false }).setView([-27.234, -52.024], 14);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom:19, attribution:'© OpenStreetMap · © CARTO' }).addTo(map);
+  L.control.zoom({ position:'bottomright' }).addTo(map);
+
+  corridaMap = L.map('corridaMap', { zoomControl:false, attributionControl:false }).setView([-27.234, -52.024], 14);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom:19 }).addTo(corridaMap);
+
+  if (navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(pos=>{
+      userLoc = { lat:pos.coords.latitude, lng:pos.coords.longitude };
+      map.setView([userLoc.lat, userLoc.lng], 15);
+      placeSelf();
+    }, ()=>{ userLoc = {lat:-27.234, lng:-52.024}; placeSelf(); });
+  } else { userLoc = {lat:-27.234, lng:-52.024}; placeSelf(); }
+}
+function placeSelf(){
+  if (selfMarker) map.removeLayer(selfMarker);
+  selfMarker = L.marker([userLoc.lat, userLoc.lng], { icon: pinIcon('motorista','🚗') }).addTo(map);
+}
+
+// ---------- online toggle ----------
+$('switchOnline').addEventListener('click', async ()=>{
+  online = !online;
+  $('switchOnline').classList.toggle('on', online);
+  $('onlineLbl').textContent = online ? 'Online' : 'Offline';
+  $('statusDot').className = 'dot ' + (online ? 'on':'off');
+  $('statusTxt').textContent = online ? 'Você está online — procurando corridas perto de você' : 'Você está offline — fique online para receber corridas';
+
+  if (online){
+    if (perfilMotorista && perfilMotorista.aprovado === false){
+      toast('Seu cadastro ainda está em análise. Você será avisado quando for aprovado.');
+      online = false; $('switchOnline').classList.remove('on'); $('onlineLbl').textContent='Offline';
+      $('statusDot').className = 'dot off'; $('statusTxt').textContent = 'Cadastro em análise — corridas liberadas após aprovação';
+      return;
+    }
+    iniciarRastreamento();
+    escutarSolicitacoes();
+  } else {
+    pararRastreamento();
+    pararEscutaSolicitacoes();
+    if (currentUser) remove(ref(db, 'motoristas_online/' + currentUser.uid));
+  }
+});
+
+function iniciarRastreamento(){
+  if (!navigator.geolocation || !currentUser) return;
+  watchId = navigator.geolocation.watchPosition(pos=>{
+    userLoc = { lat:pos.coords.latitude, lng:pos.coords.longitude };
+    placeSelf();
+    update(ref(db, 'motoristas_online/' + currentUser.uid), {
+      lat:userLoc.lat, lng:userLoc.lng,
+      nome: currentUser.displayName || 'Motorista',
+      categoria: perfilMotorista ? perfilMotorista.categoria : 'economia',
+      atualizadoEm: serverTimestamp()
+    });
+    if (activeRideId){
+      update(ref(db, 'corridas/' + activeRideId + '/motorista'), { lat:userLoc.lat, lng:userLoc.lng });
+    }
+  }, ()=>{}, { enableHighAccuracy:true, maximumAge:5000 });
+}
+function pararRastreamento(){ if (watchId !== null){ navigator.geolocation.clearWatch(watchId); watchId = null; } }
+
+// ---------- escutar solicitações ----------
+function escutarSolicitacoes(){
+  corridasListenerRef = query(ref(db, 'corridas'), orderByChild('status'), equalTo('procurando'));
+  onValue(corridasListenerRef, (snap)=>{
+    if (activeRideId || !online) return;
+    const data = snap.val() || {};
+    const ids = Object.keys(data);
+    if (!ids.length) return;
+    const id = ids[0];
+    mostrarSolicitacao(id, data[id]);
+  });
+}
+function pararEscutaSolicitacoes(){ if (corridasListenerRef) off(corridasListenerRef); }
+
+let solicitacaoAtual = null;
+function mostrarSolicitacao(id, r){
+  if ($('reqOverlay').classList.contains('show')) return;
+  solicitacaoAtual = { id, r };
+  $('reqValor').textContent = brl(r.valor);
+  $('reqOrigem').textContent = (r.origem && r.origem.endereco) || 'Local atual do passageiro';
+  $('reqDestino').textContent = (r.destino && r.destino.endereco || '').split(',')[0];
+  const km = r.distanciaKm || (userLoc && r.destino ? haversineKm(userLoc, r.destino) : 0);
+  $('reqDistancia').textContent = `${(km||0).toFixed(1)} km`;
+  const payLabels = { pix:'📱 Pix', cartao:'💳 Cartão', dinheiro:'💵 Dinheiro' };
+  $('reqPagamento').textContent = payLabels[r.pagamento] || r.pagamento || '';
+  $('reqOverlay').classList.add('show');
+
+  let tempo = 15;
+  $('reqBar').style.transition = 'none';
+  $('reqBar').style.transform = 'scaleX(1)';
+  requestAnimationFrame(()=>{
+    $('reqBar').style.transition = `transform ${tempo}s linear`;
+    $('reqBar').style.transform = 'scaleX(0)';
+  });
+  clearInterval(reqTimerInterval);
+  reqTimerInterval = setTimeout(()=>{ fecharSolicitacao(); }, tempo*1000);
+}
+function fecharSolicitacao(){
+  $('reqOverlay').classList.remove('show');
+  clearTimeout(reqTimerInterval);
+  solicitacaoAtual = null;
+}
+$('btnRecusar').addEventListener('click', fecharSolicitacao);
+$('btnAceitar').addEventListener('click', async ()=>{
+  if (!solicitacaoAtual) return;
+  const { id, r } = solicitacaoAtual;
+  fecharSolicitacao();
+  const motoristaInfo = {
+    nome: currentUser.displayName || 'Motorista',
+    veiculo: perfilMotorista ? `${perfilMotorista.modelo} · ${perfilMotorista.placa}` : '',
+    avaliacao: perfilMotorista && perfilMotorista.avaliacaoMedia ? perfilMotorista.avaliacaoMedia : '5.0',
+    etaMin: 4,
+    lat: userLoc.lat, lng: userLoc.lng
   };
+  try{
+    await update(ref(db, 'corridas/' + id), { status:'aceita', motoristaId: currentUser.uid, motorista: motoristaInfo });
+    activeRideId = id;
+    abrirCorridaAtiva(id);
+  } catch(err){ toast('Não foi possível aceitar, tente novamente.'); }
+});
 
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-  let usuario = null;
+// ---------- corrida ativa ----------
+function abrirCorridaAtiva(id){
+  showScreen('screen-corrida');
+  $('btnIniciarViagem').style.display = 'inline-flex';
+  $('btnFinalizarCorrida').style.display = 'none';
+  $('btnCancelarAceite').style.display = 'inline-flex';
+  $('corridaStatusLabel').textContent = 'Indo até o passageiro';
+  $('corridaStatusSub').textContent = 'Siga até o ponto de partida';
 
-  onAuthStateChanged(auth, (u) => {
-    if (!u) { window.location.href = "index.html"; return; }
-    usuario = u;
-    escutarCorridas();
+  activeRideRef = ref(db, 'corridas/' + id);
+  onValue(activeRideRef, (snap)=>{
+    const r = snap.val();
+    if (!r) return;
+    $('paxNome').textContent = r.passageiroNome || 'Passageiro';
+    $('paxInitial').textContent = (r.passageiroNome || '?').substring(0,1).toUpperCase();
+    $('corridaDestinoTxt').textContent = (r.destino && r.destino.endereco || 'Destino').split(',')[0];
+    $('corridaValorTxt').textContent = brl(r.valor);
+    const payLabels = { pix:'📱 Pix', cartao:'💳 Cartão', dinheiro:'💵 Dinheiro' };
+    $('corridaPagamentoTxt').textContent = payLabels[r.pagamento] || r.pagamento || '';
+
+    setTimeout(()=>{
+      corridaMap.invalidateSize();
+      if (corridaOrigemMarker) corridaMap.removeLayer(corridaOrigemMarker);
+      if (corridaDestMarker) corridaMap.removeLayer(corridaDestMarker);
+      const origem = r.origem || userLoc;
+      corridaOrigemMarker = L.marker([origem.lat, origem.lng], { icon: pinIcon('origem','●') }).addTo(corridaMap);
+      if (r.destino){
+        corridaDestMarker = L.marker([r.destino.lat, r.destino.lng], { icon: pinIcon('destino','🏁') }).addTo(corridaMap);
+        corridaMap.fitBounds(L.latLngBounds([[origem.lat,origem.lng],[r.destino.lat,r.destino.lng]]), { padding:[30,30] });
+      }
+    }, 100);
+
+    if (r.status === 'cancelada'){
+      toast('O passageiro cancelou a corrida.');
+      encerrarCorridaLocal();
+    }
+  });
+}
+
+$('btnIniciarViagem').addEventListener('click', async ()=>{
+  if (!activeRideId) return;
+  await update(ref(db, 'corridas/' + activeRideId), { status:'em_andamento' });
+  $('corridaStatusLabel').textContent = 'Em viagem';
+  $('corridaStatusSub').textContent = 'Levando o passageiro até o destino';
+  $('btnIniciarViagem').style.display = 'none';
+  $('btnFinalizarCorrida').style.display = 'inline-flex';
+});
+
+$('btnFinalizarCorrida').addEventListener('click', async ()=>{
+  if (!activeRideId) return;
+  await update(ref(db, 'corridas/' + activeRideId), { status:'finalizada', finalizadaEm: serverTimestamp() });
+  toast('Corrida finalizada!');
+  const idFinalizado = activeRideId;
+  const snap = await get(ref(db, 'corridas/' + idFinalizado));
+  const r = snap.val() || {};
+  abrirAvaliacao(idFinalizado, r.passageiroNome);
+  encerrarCorridaLocal();
+});
+
+$('btnCancelarAceite').addEventListener('click', async ()=>{
+  if (!activeRideId) return;
+  await update(ref(db, 'corridas/' + activeRideId), { status:'procurando', motoristaId:null, motorista:null });
+  toast('Você cancelou o aceite desta corrida.');
+  encerrarCorridaLocal();
+});
+
+function encerrarCorridaLocal(){
+  if (activeRideRef) off(activeRideRef);
+  activeRideId = null; activeRideRef = null;
+  showScreen('screen-home');
+  setNav('home');
+  carregarResumoGanhos();
+}
+
+// ---------- avaliação do passageiro ----------
+function abrirAvaliacao(rideId, nome){
+  ratingRideId = rideId; ratingValue = 0;
+  $('ratingPaxName').textContent = `Avalie ${nome || 'o passageiro'}`;
+  document.querySelectorAll('#starPick span').forEach(s=>s.classList.remove('on'));
+  $('ratingOverlay').classList.add('show');
+}
+document.querySelectorAll('#starPick span').forEach(s=>{
+  s.addEventListener('click', ()=>{
+    ratingValue = parseInt(s.dataset.v);
+    document.querySelectorAll('#starPick span').forEach(x=> x.classList.toggle('on', parseInt(x.dataset.v) <= ratingValue));
+  });
+});
+$('btnEnviarAvaliacao').addEventListener('click', async ()=>{
+  if (!ratingRideId || !ratingValue){ toast('Selecione de 1 a 5 estrelas'); return; }
+  await update(ref(db, 'corridas/' + ratingRideId), { avaliacaoMotorista:ratingValue });
+  $('ratingOverlay').classList.remove('show');
+  toast('Avaliação enviada!');
+});
+$('btnPularAvaliacao').addEventListener('click', ()=>{ $('ratingOverlay').classList.remove('show'); });
+
+// ---------- ganhos ----------
+async function carregarResumoGanhos(){
+  if (!currentUser) return;
+  const q = query(ref(db, 'corridas'), orderByChild('motoristaId'), equalTo(currentUser.uid));
+  const snap = await get(q);
+  const data = snap.val() || {};
+  const finalizadas = Object.values(data).filter(r=>r.status==='finalizada');
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const seteDias = Date.now() - 7*24*60*60*1000;
+
+  let totalHoje=0, totalSemana=0, totalGeral=0, qtdHoje=0;
+  finalizadas.forEach(r=>{
+    const t = r.finalizadaEm || r.criadoEm || 0;
+    totalGeral += r.valor || 0;
+    if (t >= hoje.getTime()){ totalHoje += r.valor||0; qtdHoje++; }
+    if (t >= seteDias){ totalSemana += r.valor||0; }
   });
 
-  const statusBadge = {
-    procurando: '<span class="badge badge-azul">🔍 Procurando</span>',
-    aceita: '<span class="badge badge-verde">✅ Aceita</span>',
-    em_andamento: '<span class="badge badge-amarelo">🚗 Em andamento</span>',
-    finalizada: '<span class="badge badge-cinza">🏁 Finalizada</span>',
-    cancelada: '<span class="badge badge-cinza">❌ Cancelada</span>',
-  };
+  $('ganhoHoje').textContent = brl(totalHoje);
+  $('corridasHoje').textContent = qtdHoje;
+  $('saldoTotal').textContent = brl(totalGeral);
+  $('statHoje').textContent = brl(totalHoje);
+  $('statSemana').textContent = brl(totalSemana);
+  $('statTotal').textContent = brl(totalGeral);
+}
 
-  function escutarCorridas() {
-    // Corridas disponíveis (procurando motorista)
-    onSnapshot(
-      query(collection(db, "corridas"), where("status", "==", "procurando")),
-      (snap) => {
-        const corridas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        document.getElementById("badge-disp").textContent = `(${corridas.length})`;
-        const lista = document.getElementById("lista-disponiveis");
-        if (corridas.length === 0) {
-          lista.innerHTML = '<p class="vazio">Nenhuma corrida disponível no momento.</p>';
-          return;
-        }
-        lista.innerHTML = corridas.map(c => `
-          <div class="card">
-            <div>
-              <p><strong>Destino:</strong> ${c.enderecoDestino}</p>
-              <p><strong>Pagamento:</strong> ${c.formaPagamento}</p>
-              <p>${statusBadge[c.status] || c.status}</p>
-            </div>
-            <button class="btn-aceitar" onclick="aceitar('${c.id}')">Aceitar</button>
-          </div>
-        `).join("");
-      }
-    );
-
-    // Minhas corridas
-    onSnapshot(
-      query(collection(db, "corridas"), where("motoristaId", "==", usuario.uid)),
-      (snap) => {
-        const corridas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        document.getElementById("badge-minhas").textContent = `(${corridas.length})`;
-        const lista = document.getElementById("lista-minhas");
-        if (corridas.length === 0) {
-          lista.innerHTML = '<p class="vazio">Você ainda não aceitou nenhuma corrida.</p>';
-          return;
-        }
-        lista.innerHTML = corridas.map(c => `
-          <div class="card">
-            <div>
-              <p><strong>Destino:</strong> ${c.enderecoDestino}</p>
-              <p><strong>Pagamento:</strong> ${c.formaPagamento}</p>
-              <p>${statusBadge[c.status] || c.status}</p>
-              ${c.valor ? `<p><strong>Valor:</strong> R$ ${c.valor.toFixed(2)}</p>` : ""}
-            </div>
-            <div>
-              ${c.status === "aceita" ? `<button class="btn-acao" onclick="mudarStatus('${c.id}','em_andamento')">Iniciar viagem</button>` : ""}
-              ${c.status === "em_andamento" ? `<button class="btn-acao verde" onclick="mudarStatus('${c.id}','finalizada')">Finalizar</button>` : ""}
-            </div>
-          </div>
-        `).join("");
-      }
-    );
+async function carregarListaGanhos(){
+  const list = $('ganhosList');
+  list.innerHTML = '<p style="text-align:center;color:var(--ink-soft);padding:30px;">Carregando…</p>';
+  const q = query(ref(db, 'corridas'), orderByChild('motoristaId'), equalTo(currentUser.uid));
+  const snap = await get(q);
+  const data = snap.val() || {};
+  const items = Object.entries(data)
+    .filter(([id,r])=>r.status==='finalizada')
+    .sort((a,b)=>(b[1].finalizadaEm||0)-(a[1].finalizadaEm||0));
+  if (!items.length){
+    list.innerHTML = `<div class="center-empty"><div class="big">💰</div><p>Suas corridas finalizadas vão aparecer aqui.</p></div>`;
+    return;
   }
+  list.innerHTML = '';
+  items.forEach(([id, r])=>{
+    const div = document.createElement('div');
+    div.className = 'trip-item';
+    const stars = r.avaliacaoMotorista ? '★'.repeat(r.avaliacaoMotorista) + '☆'.repeat(5-r.avaliacaoMotorista) : '— sem avaliação —';
+    div.innerHTML = `
+      <div class="row1"><span class="dest">${(r.destino && r.destino.endereco || 'Destino').split(',')[0]}</span><span class="val">+ ${brl(r.valor)}</span></div>
+      <div class="meta"><span>${(r.passageiroNome||'Passageiro')}</span><span>${(r.pagamento||'').toUpperCase()}</span></div>
+      <div class="stars">${stars}</div>`;
+    list.appendChild(div);
+  });
+}
 
-  window.aceitar = async (id) => {
-    await updateDoc(doc(db, "corridas", id), { motoristaId: usuario.uid, status: "aceita" });
-  };
+$('btnSacar').addEventListener('click', async ()=>{
+  const saldo = $('saldoTotal').textContent;
+  if (!currentUser) return;
+  const saqueRef = push(ref(db, 'saques'));
+  await set(saqueRef, { motoristaId: currentUser.uid, motoristaNome: currentUser.displayName, valor: saldo, status:'pendente', criadoEm: serverTimestamp() });
+  toast('Saque solicitado! Cairá na sua chave Pix em até 1 dia útil.');
+});
 
-  window.mudarStatus = async (id, status) => {
-    await updateDoc(doc(db, "corridas", id), { status });
-  };
+// ---------- nav ----------
+function setNav(name){
+  document.querySelectorAll('.navitem').forEach(n=>n.classList.toggle('active', n.dataset.nav===name));
+}
+document.querySelectorAll('.navitem').forEach(item=>{
+  item.addEventListener('click', ()=>{
+    const nav = item.dataset.nav;
+    if (nav === 'home'){ showScreen('screen-home'); setNav('home'); }
+    if (nav === 'ganhos'){ showScreen('screen-ganhos'); setNav('ganhos'); carregarResumoGanhos(); carregarListaGanhos(); }
+    if (nav === 'conta'){ showScreen('screen-conta'); setNav('conta'); }
+  });
+});
+$('btnGanhosBack').addEventListener('click', ()=>{ showScreen('screen-home'); setNav('home'); });
+$('btnContaBack').addEventListener('click', ()=>{ showScreen('screen-home'); setNav('home'); });
 
-  window.sair = async () => {
-    await signOut(auth);
-    window.location.href = "index.html";
-  };
+// ---------- auth screens ----------
+let modoCadastro = false;
+$('toggleLink').addEventListener('click', ()=>{
+  modoCadastro = !modoCadastro;
+  $('formLogin').style.display = modoCadastro ? 'none' : 'block';
+  $('formCadastro').style.display = modoCadastro ? 'block' : 'none';
+  $('toggleText').textContent = modoCadastro ? 'Já tem conta?' : 'Ainda não é motorista?';
+  $('toggleLink').textContent = modoCadastro ? 'Entrar' : 'Cadastre-se';
+  $('authError').style.display = 'none';
+});
+function showAuthError(msg){ const el = $('authError'); el.textContent = msg; el.style.display='block'; }
 
-  window.trocarAba = (aba, el) => {
-    document.querySelectorAll(".aba").forEach(a => a.classList.remove("ativa"));
-    el.classList.add("ativa");
-    document.getElementById("lista-disponiveis").classList.toggle("oculto", aba !== "disponiveis");
-    document.getElementById("lista-minhas").classList.toggle("oculto", aba !== "minhas");
+$('formLogin').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  try{ await signInWithEmailAndPassword(auth, $('loginEmail').value.trim(), $('loginSenha').value); }
+  catch(err){ showAuthError(traduzErro(err.code)); }
+});
+$('formCadastro').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  try{
+    const cred = await createUserWithEmailAndPassword(auth, $('cadEmail').value.trim(), $('cadSenha').value);
+    await updateProfile(cred.user, { displayName: $('cadNome').value.trim() });
+    await set(ref(db, 'motoristas/' + cred.user.uid), {
+      nome: $('cadNome').value.trim(),
+      email: $('cadEmail').value.trim(),
+      telefone: $('cadTelefone').value.trim(),
+      cpf: $('cadCpf').value.trim(),
+      cnh: $('cadCnh').value.trim(),
+      modelo: $('cadModelo').value.trim(),
+      placa: $('cadPlaca').value.trim().toUpperCase(),
+      categoria: $('cadCategoria').value,
+      aprovado: false,
+      avaliacaoMedia: 5.0,
+      criadoEm: serverTimestamp()
+    });
+    toast('Cadastro enviado! Aguarde a aprovação para começar a rodar.');
+  } catch(err){ showAuthError(traduzErro(err.code)); }
+});
+function traduzErro(code){
+  const map = {
+    'auth/email-already-in-use':'Esse e-mail já está cadastrado.',
+    'auth/invalid-email':'E-mail inválido.',
+    'auth/weak-password':'Senha muito curta (mínimo 6 caracteres).',
+    'auth/wrong-password':'Senha incorreta.',
+    'auth/user-not-found':'Usuário não encontrado.',
+    'auth/invalid-credential':'E-mail ou senha incorretos.'
   };
+  return map[code] || 'Não foi possível continuar. Tente novamente.';
+}
+$('btnLogout').addEventListener('click', ()=>{ pararRastreamento(); pararEscutaSolicitacoes(); signOut(auth); });
+
+// ---------- auth state ----------
+let mapsBooted = false;
+onAuthStateChanged(auth, async (user)=>{
+  if (user){
+    currentUser = user;
+    const hora = new Date().getHours();
+    $('greetTime').textContent = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
+    $('greetName').textContent = (user.displayName || 'Motorista').split(' ')[0];
+    $('contaNome').textContent = user.displayName || 'Motorista';
+
+    try{
+      const snap = await get(ref(db, 'motoristas/' + user.uid));
+      perfilMotorista = snap.val();
+      if (perfilMotorista){
+        $('contaVeiculo').textContent = `${perfilMotorista.modelo || ''} · ${perfilMotorista.placa || ''}`;
+        $('contaStatus').textContent = perfilMotorista.aprovado ? 'Aprovado ✅' : 'Em análise';
+        $('contaStatus').style.background = perfilMotorista.aprovado ? 'rgba(47,158,104,.15)' : 'rgba(255,177,0,.15)';
+        $('contaStatus').style.color = perfilMotorista.aprovado ? 'var(--route-green)' : 'var(--amber-dim)';
+      }
+    } catch(err){ console.warn('perfil indisponível', err); }
+
+    showScreen('screen-home');
+    setNav('home');
+    if (!mapsBooted){ initMaps(); mapsBooted = true; }
+    else setTimeout(()=>map.invalidateSize(), 100);
+    carregarResumoGanhos();
+  } else {
+    currentUser = null;
+    pararRastreamento();
+    pararEscutaSolicitacoes();
+    showScreen('screen-auth');
+  }
+});
 </script>
 </body>
-</html>
+</
