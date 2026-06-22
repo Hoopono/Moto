@@ -111,6 +111,17 @@
   #screen-home{position:relative;}
   #map{flex:1; min-height:0; width:100%; background:#cfd3da;}
   .map-wrap{position:relative; flex:1; min-height:0; display:flex;}
+  .map-wrap::after{
+    content:''; position:absolute; left:0; right:0; bottom:0; height:46px; z-index:550; pointer-events:none;
+    background:linear-gradient(180deg, transparent, var(--concrete) 92%);
+  }
+  .leaflet-container{ font-family:'Inter', sans-serif; }
+  .leaflet-control-zoom{ border:none !important; box-shadow:0 3px 10px rgba(0,0,0,.18) !important; margin-bottom:18px !important; }
+  .leaflet-control-zoom a{ background:#fff !important; color:var(--ink) !important; border:none !important; }
+  .leaflet-control-zoom a:first-child{ border-radius:10px 10px 0 0 !important; }
+  .leaflet-control-zoom a:last-child{ border-radius:0 0 10px 10px !important; }
+  .leaflet-control-attribution{ font-size:9px !important; background:rgba(255,255,255,.75) !important; }
+  #rideMap{ border-radius:0 0 18px 18px; box-shadow:0 6px 18px rgba(0,0,0,.12); }
 
   .floating-pill{
     position:absolute; top:14px; left:14px; right:14px; z-index:500;
@@ -286,7 +297,7 @@
   <!-- ================= HOME ================= -->
   <section id="screen-home" class="screen">
     <div class="topbar">
-      <div><p class="greet" id="greetTime">Boa noite</p><h2 id="greetName">Passageiro</h2></div>
+      <div><p class="greet" id="greetTime">Boa noite</p><h2 id="greetName">Passageiro</h2><p class="greet" id="greetCity" style="display:none; margin-top:2px;">—</p></div>
       <button class="iconbtn alt" id="btnLogout" title="Sair">⎋</button>
     </div>
 
@@ -448,24 +459,47 @@ const driverMarkersHome = {};
 
 function initMaps(){
   map = L.map('map', { zoomControl:false }).setView([-27.234, -52.024], 14); // Concórdia-SC default
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'© OpenStreetMap' }).addTo(map);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    maxZoom:19, attribution:'© OpenStreetMap · © CARTO'
+  }).addTo(map);
+  L.control.zoom({ position:'bottomright' }).addTo(map);
 
   rideMap = L.map('rideMap', { zoomControl:false, attributionControl:false }).setView([-27.234, -52.024], 14);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(rideMap);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom:19 }).addTo(rideMap);
 
   if (navigator.geolocation){
     navigator.geolocation.getCurrentPosition(pos=>{
       userLoc = { lat:pos.coords.latitude, lng:pos.coords.longitude };
       map.setView([userLoc.lat, userLoc.lng], 15);
       placeOrigin();
-    }, ()=>{ userLoc = {lat:-27.234, lng:-52.024}; placeOrigin(); });
-  } else { userLoc = {lat:-27.234, lng:-52.024}; placeOrigin(); }
+      detectarCidade();
+    }, ()=>{ userLoc = {lat:-27.234, lng:-52.024}; placeOrigin(); detectarCidade(); });
+  } else { userLoc = {lat:-27.234, lng:-52.024}; placeOrigin(); detectarCidade(); }
 }
 
 function placeOrigin(){
   if (originMarker) map.removeLayer(originMarker);
   originMarker = L.marker([userLoc.lat, userLoc.lng], { icon: pinIcon('origem','●') }).addTo(map);
   $('inputOrigem').value = 'Minha localização atual';
+}
+
+let cidadeAtual = '';
+async function detectarCidade(){
+  try{
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${userLoc.lat}&lon=${userLoc.lng}&zoom=10&addressdetails=1`;
+    const res = await fetch(url, { headers: { 'Accept-Language':'pt-BR' } });
+    const data = await res.json();
+    const a = data.address || {};
+    const cidade = a.city || a.town || a.village || a.municipality || '';
+    const uf = a.state_code || a.state || '';
+    cidadeAtual = cidade;
+    $('motoristasPill').dataset.cidade = cidade;
+    if (cidade){
+      $('greetCity').textContent = uf ? `${cidade} · ${uf}` : cidade;
+      $('greetCity').style.display = 'block';
+    }
+    atualizarPillMotoristas();
+  } catch(err){ console.warn('reverse geocoding falhou', err); }
 }
 
 map_clicks_pending: false;
@@ -504,11 +538,19 @@ $('inputDestino').addEventListener('input', (e)=>{
 });
 async function buscarEndereco(q){
   try{
-    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q)}`;
+    let url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=br&q=${encodeURIComponent(q)}`;
+    if (userLoc){
+      const d = 0.6; // ~60km de raio de prioridade
+      url += `&viewbox=${userLoc.lng-d},${userLoc.lat+d},${userLoc.lng+d},${userLoc.lat-d}&bounded=0`;
+    }
     const res = await fetch(url, { headers: { 'Accept-Language':'pt-BR' } });
     const data = await res.json();
     const box = $('suggestions');
     box.innerHTML = '';
+    if (!data.length){
+      box.innerHTML = `<div class="sugg-item" style="color:var(--ink-soft); cursor:default;">Nenhum endereço encontrado no Brasil</div>`;
+      return;
+    }
     data.forEach(item=>{
       const div = document.createElement('div');
       div.className = 'sugg-item';
@@ -529,6 +571,14 @@ document.querySelectorAll('.pay-chip').forEach(chip=>{
 });
 
 // ---------- nearby drivers (home map) ----------
+let qtdMotoristas = 0;
+function atualizarPillMotoristas(){
+  const base = qtdMotoristas
+    ? `${qtdMotoristas} motorista${qtdMotoristas>1?'s':''} próximo${qtdMotoristas>1?'s':''}`
+    : 'Nenhum motorista por perto agora';
+  $('motoristasPill').textContent = cidadeAtual ? `${base} · ${cidadeAtual}` : base;
+}
+
 function listenDrivers(){
   driversListenerRef = ref(db, 'motoristas_online');
   onValue(driversListenerRef, (snap)=>{
@@ -536,9 +586,8 @@ function listenDrivers(){
     Object.values(driverMarkersHome).forEach(m=>map.removeLayer(m));
     Object.keys(driverMarkersHome).forEach(k=>delete driverMarkersHome[k]);
     const ids = Object.keys(data);
-    $('motoristasPill').textContent = ids.length
-      ? `${ids.length} motorista${ids.length>1?'s':''} próximo${ids.length>1?'s':''}`
-      : 'Nenhum motorista por perto agora';
+    qtdMotoristas = ids.length;
+    atualizarPillMotoristas();
     ids.forEach(id=>{
       const d = data[id];
       if (typeof d.lat !== 'number') return;
@@ -719,13 +768,38 @@ $('btnHistoryBack').addEventListener('click', ()=>{ showScreen('screen-home'); s
 
 // ---------- auth screens ----------
 let modoCadastro = false;
+let modoReset = false;
 $('toggleLink').addEventListener('click', ()=>{
   modoCadastro = !modoCadastro;
+  modoReset = false;
+  $('formReset').style.display = 'none';
+  $('forgotWrap').style.display = modoCadastro ? 'none' : 'block';
   $('formLogin').style.display = modoCadastro ? 'none' : 'block';
   $('formCadastro').style.display = modoCadastro ? 'block' : 'none';
   $('toggleText').textContent = modoCadastro ? 'Já tem conta?' : 'Ainda não tem conta?';
   $('toggleLink').textContent = modoCadastro ? 'Entrar' : 'Cadastre-se';
   $('authError').style.display = 'none';
+});
+$('forgotLink').addEventListener('click', ()=>{
+  modoReset = true;
+  $('formLogin').style.display = 'none';
+  $('formCadastro').style.display = 'none';
+  $('forgotWrap').style.display = 'none';
+  $('formReset').style.display = 'block';
+  $('authError').style.display = 'none';
+  const emailAtual = $('loginEmail').value.trim();
+  if (emailAtual) $('resetEmail').value = emailAtual;
+});
+$('formReset').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  try{
+    await sendPasswordResetEmail(auth, $('resetEmail').value.trim());
+    toast('Enviamos um link para redefinir sua senha. Confira seu e-mail.');
+    modoReset = false;
+    $('formReset').style.display = 'none';
+    $('formLogin').style.display = 'block';
+    $('forgotWrap').style.display = 'block';
+  } catch(err){ showAuthError(traduzErro(err.code)); }
 });
 function showAuthError(msg){
   const el = $('authError'); el.textContent = msg; el.style.display='block';
