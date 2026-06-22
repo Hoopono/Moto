@@ -52,6 +52,10 @@
       background: #f0fdf4; border: 1px solid #bbf7d0;
       border-radius: 10px;
     }
+    .status-box.azul { background: #eff6ff; border-color: #bfdbfe; }
+    .status-box.amarelo { background: #fffbeb; border-color: #fde68a; }
+    .status-box.cinza { background: #f9fafb; border-color: #e5e7eb; }
+
     .spinner {
       width: 36px; height: 36px; border: 3px solid #e5e7eb;
       border-top-color: #2563eb; border-radius: 50%;
@@ -64,6 +68,14 @@
       background: transparent; color: #dc2626;
       border: 1px solid #dc2626; border-radius: 8px; cursor: pointer;
     }
+    .btn-secundario {
+      margin-top: 10px; width: 100%; padding: 10px;
+      background: #2563eb; color: white;
+      border: none; border-radius: 8px; cursor: pointer; font-weight: 600;
+    }
+
+    .info-motorista { text-align: left; font-size: 13px; color: #374151; margin-top: 8px; }
+    .info-motorista p { margin-bottom: 4px; }
 
     hr { border: none; border-top: 1px solid #e5e7eb; }
     .link-hist {
@@ -72,6 +84,7 @@
       border: 1px solid #dbeafe; border-radius: 8px; background: #eff6ff;
       display: block;
     }
+    .lista-proximos { font-size: 12px; color: #6b7280; }
     .oculto { display: none !important; }
   </style>
 </head>
@@ -91,6 +104,7 @@
     <!-- Estado: escolhendo destino -->
     <div id="painel-escolha">
       <p class="info-destino" id="info-destino">Clique no mapa para escolher o destino</p>
+      <p class="lista-proximos" id="info-proximos">Procurando motoristas próximos...</p>
       <label>Pagamento</label>
       <select id="pagamento">
         <option value="dinheiro">💵 Dinheiro</option>
@@ -102,14 +116,9 @@
       </button>
     </div>
 
-    <!-- Estado: aguardando motorista -->
-    <div id="painel-aguardando" class="oculto">
-      <div class="status-box">
-        <div class="spinner"></div>
-        <p><strong>Procurando motorista...</strong></p>
-        <small id="id-corrida"></small>
-        <button class="btn-cancelar" onclick="cancelar()">Cancelar corrida</button>
-      </div>
+    <!-- Estado: corrida em andamento (conteúdo dinâmico) -->
+    <div id="painel-status" class="oculto">
+      <div class="status-box" id="status-box-conteudo"></div>
     </div>
 
     <hr/>
@@ -122,7 +131,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
   import { getAuth, onAuthStateChanged, signOut }
     from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-  import { getFirestore, collection, addDoc, doc, updateDoc }
+  import { getFirestore, collection, addDoc, doc, updateDoc, onSnapshot, getDoc, query, where }
     from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -142,6 +151,9 @@
   let usuario = null;
   let destino = null;
   let corridaId = null;
+  let corridaUnsub = null;
+  let motoristaMarcador = null;
+  const cacheMotoristas = {};
   const origem = { lat: -23.5505, lng: -46.6333 }; // São Paulo
 
   // Verifica se está logado
@@ -163,9 +175,11 @@
     .openPopup();
 
   let marcadorDestino = null;
+  const camadaMotoristas = L.layerGroup().addTo(mapa);
 
   // Clique no mapa seleciona destino
   mapa.on("click", (e) => {
+    if (corridaId) return; // não permite trocar destino com corrida ativa
     destino = { lat: e.latlng.lat, lng: e.latlng.lng };
     if (marcadorDestino) mapa.removeLayer(marcadorDestino);
     marcadorDestino = L.marker([destino.lat, destino.lng])
@@ -175,6 +189,31 @@
     document.getElementById("info-destino").textContent =
       `✅ Destino: ${destino.lat.toFixed(4)}, ${destino.lng.toFixed(4)}`;
     document.getElementById("btn-solicitar").disabled = false;
+  });
+
+  // ----- Motoristas próximos (online e aprovados) -----
+  const carroIcon = L.divIcon({ html: "🚗", className: "", iconSize: [24, 24] });
+
+  onSnapshot(query(collection(db, "motoristas"), where("aprovado", "==", true)), (snap) => {
+    const agora = Date.now();
+    camadaMotoristas.clearLayers();
+    let visiveis = 0;
+    snap.docs.forEach(d => {
+      const m = d.data();
+      cacheMotoristas[d.id] = m;
+      if (!m.localizacao || !m.localizacao.atualizadoEm) return;
+      if (agora - m.localizacao.atualizadoEm > 3 * 60 * 1000) return; // só motoristas online (últimos 3min)
+      if (corridaId) return; // some com a lista quando já tem corrida ativa
+      visiveis++;
+      L.marker([m.localizacao.lat, m.localizacao.lng], { icon: carroIcon })
+        .addTo(camadaMotoristas)
+        .bindPopup(`🚗 ${m.nome || "Motorista"}${m.notaMedia ? " — ⭐ " + m.notaMedia.toFixed(1) : ""}`);
+    });
+    if (!corridaId) {
+      document.getElementById("info-proximos").textContent = visiveis > 0
+        ? `🚗 ${visiveis} motorista(s) próximo(s) agora`
+        : "Nenhum motorista online no momento";
+    }
   });
 
   window.solicitar = async () => {
@@ -194,23 +233,107 @@
       criadoEm: Date.now(),
     });
     corridaId = docRef.id;
-    document.getElementById("id-corrida").textContent = "ID: " + corridaId;
+    camadaMotoristas.clearLayers();
     document.getElementById("painel-escolha").classList.add("oculto");
-    document.getElementById("painel-aguardando").classList.remove("oculto");
+    document.getElementById("painel-status").classList.remove("oculto");
+    escutarCorridaAtual(corridaId);
   };
 
-  window.cancelar = async () => {
-    if (corridaId) {
-      await updateDoc(doc(db, "corridas", corridaId), { status: "cancelada" });
+  function escutarCorridaAtual(id) {
+    if (corridaUnsub) corridaUnsub();
+    corridaUnsub = onSnapshot(doc(db, "corridas", id), async (snap) => {
+      if (!snap.exists()) return;
+      const c = snap.data();
+      await renderizarStatus(c);
+    });
+  }
+
+  async function renderizarStatus(c) {
+    const box = document.getElementById("status-box-conteudo");
+    box.className = "status-box";
+
+    if (c.status === "procurando") {
+      box.innerHTML = `
+        <div class="spinner"></div>
+        <p><strong>Procurando motorista...</strong></p>
+        <small>ID: ${corridaId}</small>
+        <button class="btn-cancelar" onclick="cancelar()">Cancelar corrida</button>`;
+      if (motoristaMarcador) { mapa.removeLayer(motoristaMarcador); motoristaMarcador = null; }
+      return;
     }
+
+    if (c.status === "aceita" || c.status === "em_andamento") {
+      box.classList.add(c.status === "aceita" ? "azul" : "amarelo");
+      let mot = cacheMotoristas[c.motoristaId];
+      if (!mot && c.motoristaId) {
+        const ms = await getDoc(doc(db, "motoristas", c.motoristaId));
+        mot = ms.exists() ? ms.data() : {};
+        cacheMotoristas[c.motoristaId] = mot;
+      }
+      mot = mot || {};
+      const titulo = c.status === "aceita" ? "🚗 Motorista a caminho" : "🛣️ Em viagem";
+      box.innerHTML = `
+        <p><strong>${titulo}</strong></p>
+        <div class="info-motorista">
+          <p>👤 ${mot.nome || "—"}</p>
+          <p>📞 ${mot.telefone || "—"}</p>
+          <p>🚘 ${mot.modeloVeiculo || "—"} ${mot.corVeiculo ? "(" + mot.corVeiculo + ")" : ""}</p>
+          <p>🔢 Placa: ${mot.placa || "—"}</p>
+          ${mot.notaMedia ? `<p>⭐ ${mot.notaMedia.toFixed(1)} (${mot.totalAvaliacoes || 0} avaliações)</p>` : ""}
+        </div>
+        ${c.status === "aceita" ? '<button class="btn-cancelar" onclick="cancelar()">Cancelar corrida</button>' : ""}`;
+
+      if (c.motoristaLat && c.motoristaLng) {
+        if (motoristaMarcador) {
+          motoristaMarcador.setLatLng([c.motoristaLat, c.motoristaLng]);
+        } else {
+          motoristaMarcador = L.marker([c.motoristaLat, c.motoristaLng], { icon: carroIcon })
+            .addTo(mapa).bindPopup("🚗 Motorista");
+        }
+      }
+      return;
+    }
+
+    if (c.status === "finalizada") {
+      box.classList.add("cinza");
+      box.innerHTML = `
+        <p style="font-size:28px;">🏁</p>
+        <p><strong>Corrida finalizada!</strong></p>
+        <p style="margin:8px 0; font-size:14px;">${c.valor ? "Valor: R$ " + c.valor.toFixed(2) : ""}</p>
+        <a href="historico.html" class="btn-secundario" style="display:block; text-decoration:none; box-sizing:border-box;">⭐ Avaliar motorista</a>
+        <button class="btn-cancelar" style="color:#374151; border-color:#374151;" onclick="novaCorrida()">Nova corrida</button>`;
+      if (motoristaMarcador) { mapa.removeLayer(motoristaMarcador); motoristaMarcador = null; }
+      return;
+    }
+
+    if (c.status === "cancelada") {
+      box.classList.add("cinza");
+      box.innerHTML = `
+        <p><strong>❌ Corrida cancelada</strong></p>
+        <button class="btn-secundario" onclick="novaCorrida()">Nova corrida</button>`;
+      if (motoristaMarcador) { mapa.removeLayer(motoristaMarcador); motoristaMarcador = null; }
+    }
+  }
+
+  function resetEstado() {
+    if (corridaUnsub) { corridaUnsub(); corridaUnsub = null; }
+    if (motoristaMarcador) { mapa.removeLayer(motoristaMarcador); motoristaMarcador = null; }
     document.getElementById("painel-escolha").classList.remove("oculto");
-    document.getElementById("painel-aguardando").classList.add("oculto");
+    document.getElementById("painel-status").classList.add("oculto");
     document.getElementById("btn-solicitar").disabled = false;
     document.getElementById("btn-solicitar").textContent = "Solicitar corrida";
     destino = null; corridaId = null;
     if (marcadorDestino) { mapa.removeLayer(marcadorDestino); marcadorDestino = null; }
     document.getElementById("info-destino").textContent = "Clique no mapa para escolher o destino";
+  }
+
+  window.cancelar = async () => {
+    if (corridaId) {
+      await updateDoc(doc(db, "corridas", corridaId), { status: "cancelada" });
+    }
   };
+
+  window.novaCorrida = () => resetEstado();
 
   window.sair = async () => {
     await signOut(auth);
